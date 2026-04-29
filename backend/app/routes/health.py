@@ -5,6 +5,9 @@ from app.services.health_service import live_health_check
 
 health_bp = Blueprint("health", __name__)
 
+@health_bp.route("/live")
+def live():
+    return {"ok": True}, 200
 
 @health_bp.route("/health", methods=["GET"])
 def health_ok():

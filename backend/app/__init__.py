@@ -74,6 +74,11 @@ def register_extensions(app):
 
     @app.before_request
     def finalize_pending_day_entries():
+        # Skip heavy logic for fast endpoints
+        if request.path.startswith("/health"):
+            return
+        if request.path.startswith("/webhooks"):
+            return
     # ✅ Allow WhatsApp webhook (Meta servers)
         if request.blueprint == "whatsapp":
             return

@@ -64,8 +64,8 @@ def process_message(message):
     else:
         reply = handle_farmer_message(phone, body)
     if reply:
-        send_whatsapp_message(phone, reply)
-
+        import threading
+        threading.Thread(target=send_whatsapp_message, args=(phone, reply)).start()
 
 def extract_message_text(message):
     interactive = message.get("interactive", {})
