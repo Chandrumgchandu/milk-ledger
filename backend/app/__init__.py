@@ -74,13 +74,18 @@ def register_extensions(app):
 
     @app.before_request
     def finalize_pending_day_entries():
-        trusted_hosts = app.config.get("TRUSTED_HOSTS") or []
-        if trusted_hosts:
-            host = (request.host.split(":")[0] if request.host else "").lower()
-            if host not in trusted_hosts:
-                abort(400)
-        session.permanent = False
-        auto_finalize_day_entries()
+    # ✅ Allow WhatsApp webhook (Meta servers)
+        if request.blueprint == "whatsapp":
+            return
+
+    trusted_hosts = app.config.get("TRUSTED_HOSTS") or []
+    if trusted_hosts:
+        host = (request.host.split(":")[0] if request.host else "").lower()
+        if host not in trusted_hosts:
+            abort(400)
+
+    session.permanent = False
+    auto_finalize_day_entries()
 
     @app.after_request
     def add_security_headers(response):
