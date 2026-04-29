@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from flask import Blueprint, current_app, jsonify, request
 
-from app.services.session_service import current_collection_session, dashboard_link, now_ist
+from app.services.session_service import dashboard_link, get_active_session, now_ist
 from app.services.supabase_service import (
     clear_whatsapp_state,
     create_entry,
@@ -30,17 +30,13 @@ from app.utils.helpers import money, normalize_phone
 logger = logging.getLogger(__name__)
 whatsapp_bp = Blueprint("whatsapp", __name__)
 
-OWNER_MENU_BUTTONS = [
-    {"id": "owner_change_rate", "title": "Change Rate"},
-    {"id": "owner_dashboard_link", "title": "Dashboard Link"},
-    {"id": "owner_stop_entry", "title": "Stop Entry"},
-]
-
-ENTRY_ACTION_BUTTONS = [
-    {"id": "owner_edit_last", "title": "Edit Last Entry"},
-    {"id": "owner_pending_list", "title": "Pending List"},
-    {"id": "owner_main_menu", "title": "Main Menu"},
-]
+BUTTON_START_ENTRY = {"id": "start_entry", "title": "Start Entry"}
+BUTTON_PENDING_LIST = {"id": "pending_list", "title": "Pending List"}
+BUTTON_MAIN_MENU = {"id": "main_menu", "title": "Main Menu"}
+BUTTON_CHANGE_RATE = {"id": "change_rate", "title": "Change Rate"}
+BUTTON_DASHBOARD = {"id": "dashboard", "title": "Dashboard"}
+BUTTON_STOP_ENTRY = {"id": "stop_entry", "title": "Stop Entry"}
+BUTTON_EDIT_LAST = {"id": "edit_last", "title": "Edit Last"}
 
 
 @whatsapp_bp.route("", methods=["GET"], strict_slashes=False)
@@ -74,23 +70,16 @@ def process_message(message):
     if not message_id:
         return
     if is_processed_message(message_id):
-        logger.info("Skipping duplicate WhatsApp message %s", message_id)
         return
 
     phone = normalize_phone(message.get("from"))
     body = extract_message_text(message)
+    mark_message_processed(message_id, phone)
     if not body:
-        mark_message_processed(message_id, phone)
         return
 
     logger.info("Incoming WhatsApp message from %s: %s", phone, body)
-    mark_message_processed(message_id, phone)
-
-    if phone == normalize_phone(current_app.config["WHATSAPP_OWNER_PHONE"]):
-        response = handle_owner_message(phone, body)
-    else:
-        response = handle_farmer_message(phone, body)
-
+    response = handle_owner_message(phone, body) if phone == normalize_phone(current_app.config["WHATSAPP_OWNER_PHONE"]) else handle_farmer_message(phone, body)
     dispatch_response(phone, response)
 
 
@@ -100,22 +89,21 @@ def extract_message_text(message):
         return interactive["button_reply"]["id"]
     if interactive.get("list_reply", {}).get("id"):
         return interactive["list_reply"]["id"]
-    return (message.get("text", {}) or {}).get("body", "").strip()
+    return ((message.get("text") or {}).get("body") or "").strip()
 
 
 def dispatch_response(phone, response):
     if not response:
         return
-    response_type = response.get("type")
-    if response_type == "buttons":
+    if response["type"] == "buttons":
         send_owner_buttons(phone, response["text"], response["buttons"])
         return
-    if response_type == "text":
+    if response["type"] == "text":
         send_whatsapp_message(phone, response["text"])
 
 
 def send_owner_buttons(phone, text, buttons):
-    send_whatsapp_buttons(phone, text, buttons)
+    send_whatsapp_buttons(phone, text, buttons[:3])
 
 
 def handle_owner_message(phone, body):
@@ -125,100 +113,116 @@ def handle_owner_message(phone, body):
 
 def process_owner_flow(phone, body, state):
     now = now_ist()
-    session_name = current_collection_session(now)
+    active_session = get_active_session(now)
     normalized = body.strip().lower()
 
     if state and state.state == "awaiting_rate":
-        return save_new_rate(phone, body)
+        return save_new_rate(phone, body, active_session, state)
 
     if state and state.state == "awaiting_edit_quantity":
-        return edit_last_entry(phone, state, body)
+        if not active_session:
+            clear_whatsapp_state(phone)
+            return closed_collection_response()
+        return edit_last_entry(phone, state, body, active_session)
+
+    if normalized == "dashboard":
+        return {"type": "text", "text": dashboard_link()}
+
+    if normalized == "change_rate":
+        upsert_whatsapp_state(
+            phone,
+            "owner",
+            "awaiting_rate",
+            context_value=active_session,
+            last_entry_id=state.last_entry_id if state else None,
+            last_farmer_id=state.last_farmer_id if state else None,
+        )
+        return {"type": "text", "text": "Send new rate"}
+
+    if not active_session:
+        clear_whatsapp_state(phone)
+        return closed_collection_response()
 
     if state and state.state.startswith("entry_active_"):
-        active_session = state.state.replace("entry_active_", "", 1)
-        if normalized == "owner_edit_last":
-            return begin_edit_last_entry(phone, state)
-        if normalized == "owner_pending_list":
-            return pending_message(active_session)
-        if normalized == "owner_main_menu":
-            return owner_main_menu()
-        if normalized == "owner_dashboard_link":
-            return {"type": "text", "text": dashboard_link()}
-        if normalized == "owner_change_rate":
-            upsert_whatsapp_state(phone, "owner", "awaiting_rate", context_value=active_session, last_entry_id=state.last_entry_id, last_farmer_id=state.last_farmer_id)
-            return {"type": "text", "text": "Send new rate"}
-        if normalized == "owner_stop_entry":
+        state_session = state.state.replace("entry_active_", "", 1)
+        if state_session != active_session:
+            clear_whatsapp_state(phone)
+            return session_entry_prompt(active_session)
+
+        if normalized == "start_entry":
+            return start_entry(phone, active_session, state)
+        if normalized == "pending_list":
+            return pending_list_response(active_session)
+        if normalized == "main_menu":
+            return owner_main_menu(active_session, entry_started=True)
+        if normalized == "stop_entry":
             clear_whatsapp_state(phone)
             return {"type": "text", "text": "Entry stopped"}
-        if normalized == "owner_start_entry":
-            return start_entry_prompt(phone, active_session)
+        if normalized == "edit_last":
+            return begin_edit_last_entry(phone, state)
         return save_owner_entry(phone, active_session, body, state)
 
     if normalized in {"hi", "hello", "start", "menu"}:
-        if session_name:
-            clear_whatsapp_state(phone)
-            return session_entry_point(session_name)
-        return owner_main_menu("No active milk session right now.")
+        return session_entry_prompt(active_session)
 
-    if normalized == "owner_start_entry":
-        if not session_name:
-            return {"type": "text", "text": "Outside session window."}
-        return start_entry_prompt(phone, session_name)
+    if normalized == "start_entry":
+        return start_entry(phone, active_session, state)
 
-    if normalized == "owner_pending_list":
-        if not session_name:
-            return {"type": "text", "text": "Outside session window."}
-        return pending_message(session_name)
+    if normalized == "pending_list":
+        return pending_list_response(active_session)
 
-    if normalized == "owner_main_menu":
-        return owner_main_menu()
+    if normalized == "main_menu":
+        return owner_main_menu(active_session, entry_started=False)
 
-    if normalized == "owner_dashboard_link":
-        return {"type": "text", "text": dashboard_link()}
+    if normalized == "stop_entry":
+        return {"type": "text", "text": "Milk collection is currently closed."}
 
-    if normalized == "owner_change_rate":
-        upsert_whatsapp_state(phone, "owner", "awaiting_rate")
-        return {"type": "text", "text": "Send new rate"}
-
-    if normalized == "owner_stop_entry":
-        clear_whatsapp_state(phone)
-        return {"type": "text", "text": "Entry stopped"}
-
-    if session_name:
-        clear_whatsapp_state(phone)
-        return session_entry_point(session_name)
-
-    return owner_main_menu("No active milk session right now.")
+    return session_entry_prompt(active_session)
 
 
-def session_entry_point(session_name):
+def closed_collection_response():
     return {
         "type": "buttons",
-        "text": f"Start {session_name} milk entry?",
-        "buttons": [
-            {"id": "owner_start_entry", "title": "Start Entry"},
-            {"id": "owner_pending_list", "title": "Pending List"},
-            {"id": "owner_main_menu", "title": "Main Menu"},
-        ],
+        "text": "Milk collection is currently closed.",
+        "buttons": [BUTTON_DASHBOARD, BUTTON_CHANGE_RATE],
     }
 
 
-def start_entry_prompt(phone, session_name):
-    current_session = current_collection_session(now_ist())
-    if current_session != session_name:
-        return {"type": "text", "text": "Outside session window."}
-    upsert_whatsapp_state(phone, "owner", f"entry_active_{session_name}", context_value=session_name)
-    return {"type": "text", "text": "Send in format: <ID> <liters>\nExample: 1 5.5"}
+def session_entry_prompt(session_name):
+    return {
+        "type": "buttons",
+        "text": f"Start {session_name} milk entry?",
+        "buttons": [BUTTON_START_ENTRY, BUTTON_PENDING_LIST, BUTTON_MAIN_MENU],
+    }
+
+
+def owner_main_menu(session_name, entry_started):
+    buttons = [BUTTON_CHANGE_RATE, BUTTON_DASHBOARD]
+    if session_name:
+        buttons.append(BUTTON_STOP_ENTRY if entry_started else BUTTON_START_ENTRY)
+    return {"type": "buttons", "text": "Main Menu", "buttons": buttons}
+
+
+def start_entry(phone, session_name, state):
+    upsert_whatsapp_state(
+        phone,
+        "owner",
+        f"entry_active_{session_name}",
+        context_value=session_name,
+        last_entry_id=state.last_entry_id if state else None,
+        last_farmer_id=state.last_farmer_id if state else None,
+    )
+    return {"type": "text", "text": "Send: <ID> <Liters>\nExample: 1 5.5"}
 
 
 def save_owner_entry(phone, session_name, body, state):
-    if current_collection_session(now_ist()) != session_name:
+    if get_active_session(now_ist()) != session_name:
         clear_whatsapp_state(phone)
-        return {"type": "text", "text": "Outside session window."}
+        return closed_collection_response()
 
     match = re.match(r"^(?P<code>\d+)\s+(?P<quantity>\d+(?:\.\d+)?)$", body.strip())
     if not match:
-        return {"type": "text", "text": "Invalid format.\nSend in format: <ID> <liters>\nExample: 1 5.5"}
+        return {"type": "text", "text": "Invalid format.\nSend: <ID> <Liters>\nExample: 1 5.5"}
 
     farmer = get_farmer_by_code(match.group("code"))
     if not farmer or not farmer.is_active:
@@ -253,14 +257,14 @@ def save_owner_entry(phone, session_name, body, state):
     )
     return {
         "type": "buttons",
-        "text": f"✅ {farmer.name} - {quantity:.2f}L added successfully\nSend next in format: <ID> <liters>",
-        "buttons": ENTRY_ACTION_BUTTONS,
+        "text": f"✅ {farmer.name} - {quantity:.2f}L added\nSend: <ID> <Liters>",
+        "buttons": [BUTTON_EDIT_LAST, BUTTON_PENDING_LIST, BUTTON_MAIN_MENU],
     }
 
 
 def begin_edit_last_entry(phone, state):
     if not state or not state.last_entry_id:
-        return {"type": "text", "text": "No last entry to edit."}
+        return {"type": "text", "text": "Invalid ID"}
     upsert_whatsapp_state(
         phone,
         "owner",
@@ -272,12 +276,11 @@ def begin_edit_last_entry(phone, state):
     return {"type": "text", "text": "Send corrected liters only\nExample: 5.8"}
 
 
-def edit_last_entry(phone, state, body):
+def edit_last_entry(phone, state, body, active_session):
     entry = get_entry(state.last_entry_id)
     if not entry:
         clear_whatsapp_state(phone)
-        return {"type": "text", "text": "No last entry to edit."}
-
+        return {"type": "text", "text": "Invalid ID"}
     try:
         quantity = money(Decimal(body.strip()))
     except Exception:
@@ -297,36 +300,28 @@ def edit_last_entry(phone, state, body):
     upsert_whatsapp_state(
         phone,
         "owner",
-        f"entry_active_{entry.session}",
-        context_value=entry.session,
+        f"entry_active_{active_session}",
+        context_value=active_session,
         last_entry_id=entry.id,
         last_farmer_id=entry.farmer_id,
     )
     return {
         "type": "buttons",
-        "text": f"✅ Updated to {quantity:.2f}L\nSend next in format: <ID> <liters>",
-        "buttons": ENTRY_ACTION_BUTTONS,
+        "text": f"✅ Updated to {quantity:.2f}L\nSend: <ID> <Liters>",
+        "buttons": [BUTTON_EDIT_LAST, BUTTON_PENDING_LIST, BUTTON_MAIN_MENU],
     }
 
 
-def pending_message(session_name):
+def pending_list_response(session_name):
     pending = pending_for_session(now_ist().date(), session_name)
     if pending:
-        lines = [f"{farmer.unique_code} - {farmer.name}" for farmer in pending[:30]]
-        text = "Pending Farmers:\n" + "\n".join(lines)
+        text = "Pending Farmers:\n" + "\n".join(f"{farmer.unique_code} - {farmer.name}" for farmer in pending[:30])
     else:
         text = "Pending Farmers:\nNone"
-    return {"type": "buttons", "text": text, "buttons": ENTRY_ACTION_BUTTONS}
+    return {"type": "buttons", "text": text, "buttons": [BUTTON_EDIT_LAST, BUTTON_PENDING_LIST, BUTTON_MAIN_MENU]}
 
 
-def owner_main_menu(prefix_text=None):
-    text = "Main Menu"
-    if prefix_text:
-        text = f"{prefix_text}\n\nMain Menu"
-    return {"type": "buttons", "text": text, "buttons": OWNER_MENU_BUTTONS}
-
-
-def save_new_rate(phone, body):
+def save_new_rate(phone, body, active_session, state):
     try:
         rate = money(Decimal(body.strip()))
     except Exception:
@@ -334,8 +329,23 @@ def save_new_rate(phone, body):
     if rate <= 0:
         return {"type": "text", "text": "Invalid rate.\nSend new rate"}
     create_rate(rate, created_by=phone)
+    confirmation_text = f"✅ New rate saved: Rs. {rate:.2f}"
+    if active_session and state and state.context_value == active_session:
+        upsert_whatsapp_state(
+            phone,
+            "owner",
+            f"entry_active_{active_session}",
+            context_value=active_session,
+            last_entry_id=state.last_entry_id,
+            last_farmer_id=state.last_farmer_id,
+        )
+        return {"type": "buttons", "text": confirmation_text, "buttons": [BUTTON_EDIT_LAST, BUTTON_PENDING_LIST, BUTTON_MAIN_MENU]}
     clear_whatsapp_state(phone)
-    return {"type": "buttons", "text": f"✅ New rate saved: Rs. {rate:.2f}", "buttons": OWNER_MENU_BUTTONS}
+    if active_session:
+        response = owner_main_menu(active_session, entry_started=False)
+        response["text"] = confirmation_text
+        return response
+    return {"type": "buttons", "text": confirmation_text, "buttons": [BUTTON_DASHBOARD, BUTTON_CHANGE_RATE]}
 
 
 def handle_farmer_message(phone, body):
@@ -350,10 +360,7 @@ def handle_farmer_message(phone, body):
         entry = latest_relevant_farmer_entry(farmer.id, now_ist())
         if not entry:
             return {"type": "text", "text": "No recent milk entry found."}
-        return {
-            "type": "text",
-            "text": f"Latest {entry.session.title()} quantity:\n{entry.quantity:.2f} liters\nAmount: Rs. {entry.amount:.2f}\nDate: {entry.date.isoformat()}",
-        }
+        return {"type": "text", "text": f"Latest {entry.session.title()} quantity:\n{entry.quantity:.2f} liters\nAmount: Rs. {entry.amount:.2f}\nDate: {entry.date.isoformat()}"}
     if normalized == "farmer_month_qty":
         total_qty, _ = monthly_totals(farmer.id, now_ist().year, now_ist().month)
         return {"type": "text", "text": f"{now_ist():%B} Total Milk:\n{total_qty:.2f} liters"}

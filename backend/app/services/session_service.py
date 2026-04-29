@@ -1,4 +1,5 @@
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from flask import current_app
@@ -15,16 +16,6 @@ def now_ist():
 
 def today_ist():
     return now_ist().date()
-
-
-def current_collection_session(current_dt):
-    settings = get_session_settings()
-    minutes = current_dt.hour * 60 + current_dt.minute
-    if settings["morning_start_minutes"] <= minutes <= settings["morning_end_minutes"]:
-        return "morning"
-    if settings["evening_start_minutes"] <= minutes <= settings["evening_end_minutes"]:
-        return "evening"
-    return None
 
 
 def dashboard_link():
@@ -66,47 +57,90 @@ def update_session_settings(morning_start, morning_end, evening_start, evening_e
     get_client().table("app_settings").upsert(rows, on_conflict="key").execute()
 
 
-def auto_finalize_day_entries(current_dt=None):
+def current_collection_session(current_dt):
+    settings = get_session_settings()
+    minutes = current_dt.hour * 60 + current_dt.minute
+    if settings["morning_start_minutes"] <= minutes <= settings["morning_end_minutes"]:
+        return "morning"
+    if settings["evening_start_minutes"] <= minutes <= settings["evening_end_minutes"]:
+        return "evening"
+    return None
+
+
+def get_active_session(current_dt=None):
+    current_dt = current_dt or now_ist()
+    override = _session_override()
+    if override in {"morning", "evening"}:
+        return override
+    if override in {"closed", "off"}:
+        return None
+    return current_collection_session(current_dt)
+
+
+def is_session_active(current_dt=None):
+    return get_active_session(current_dt) is not None
+
+
+def auto_close_sessions(current_dt=None):
     current_dt = current_dt or now_ist()
     total_created = 0
-
     if _past_finalization_cutoff(current_dt, "morning"):
-        total_created += _finalize_session(current_dt, "morning")
+        total_created += finalize_session(current_dt.date(), "morning")
     if _past_finalization_cutoff(current_dt, "evening"):
-        total_created += _finalize_session(current_dt, "evening")
-
+        total_created += finalize_session(current_dt.date(), "evening")
     return total_created
 
 
-def _finalize_session(current_dt, session_name):
-    session_key = f"session_finalized_{current_dt.date().isoformat()}_{session_name}"
-    if _is_flag_set(session_key):
+def finalize_session(target_date, session_name):
+    target_date = _ensure_date(target_date)
+    if is_session_closed(target_date, session_name):
         return 0
 
-    try:
-        from app.services.supabase_service import auto_fill_zero_entries, set_app_setting
+    from app.services.supabase_service import (
+        get_current_rate,
+        get_entry_by_unique_key,
+        list_farmers,
+        create_entry,
+        mark_session_closed,
+    )
 
-        created = auto_fill_zero_entries(current_dt.date(), session_name)
-        set_app_setting(session_key, "true")
-        logger.info(
-            "Finalized %s session for %s with %s zero-filled pending entries",
-            session_name,
-            current_dt.date().isoformat(),
-            created,
+    current_rate = get_current_rate()
+    applied_rate = current_rate.rate if current_rate else Decimal("0.00")
+    created = 0
+    for farmer in list_farmers(active_only=True):
+        if get_entry_by_unique_key(farmer.id, target_date, session_name):
+            continue
+        create_entry(
+            {
+                "farmer_id": farmer.id,
+                "date": target_date.isoformat(),
+                "session": session_name,
+                "quantity": "0.00",
+                "rate": str(applied_rate),
+                "amount": "0.00",
+            }
         )
-        return created
-    except Exception as exc:
-        logger.warning("Automatic %s zero-fill failed: %s", session_name, exc)
-        return 0
+        created += 1
+
+    mark_session_closed(target_date, session_name)
+    logger.info("Closed %s session for %s with %s zero entries", session_name, target_date.isoformat(), created)
+    return created
 
 
-def _is_flag_set(key):
+def is_session_closed(target_date, session_name):
+    from app.services.supabase_service import is_session_closed_recorded
+
+    return is_session_closed_recorded(_ensure_date(target_date), session_name)
+
+
+def _session_override():
     try:
         from app.services.supabase_service import get_app_setting
 
-        return get_app_setting(key) == "true"
+        value = (get_app_setting("active_session_override", "") or "").strip().lower()
+        return value
     except Exception:
-        return False
+        return ""
 
 
 def _past_finalization_cutoff(current_dt, session_name):
@@ -121,3 +155,9 @@ def _past_finalization_cutoff(current_dt, session_name):
 def _to_minutes(value):
     hours, minutes = value.split(":")
     return int(hours) * 60 + int(minutes)
+
+
+def _ensure_date(value):
+    if isinstance(value, date):
+        return value
+    return date.fromisoformat(str(value))

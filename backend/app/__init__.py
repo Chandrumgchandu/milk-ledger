@@ -65,7 +65,7 @@ def register_extensions(app):
     login_manager.login_message_category = "warning"
     login_manager.session_protection = "strong"
 
-    from .services.session_service import auto_finalize_day_entries
+    from .services.session_service import auto_close_sessions
     from .services.supabase_service import get_admin_by_id
 
     @login_manager.user_loader
@@ -74,13 +74,6 @@ def register_extensions(app):
 
     @app.before_request
     def finalize_pending_day_entries():
-        if request.path.startswith("/health"):
-            return
-        if request.path.startswith("/webhooks"):
-            return
-        if request.blueprint == "whatsapp":
-            return
-
         trusted_hosts = app.config.get("TRUSTED_HOSTS") or []
         if trusted_hosts:
             host = (request.host.split(":")[0] if request.host else "").lower()
@@ -88,7 +81,7 @@ def register_extensions(app):
                 abort(400)
 
         session.permanent = False
-        auto_finalize_day_entries()
+        auto_close_sessions()
 
     @app.after_request
     def add_security_headers(response):

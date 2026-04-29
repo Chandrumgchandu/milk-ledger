@@ -137,6 +137,13 @@ create table if not exists processed_messages (
     processed_at timestamptz not null default now()
 );
 
+create table if not exists session_closures (
+    date date not null,
+    session varchar(20) not null,
+    closed_at timestamptz not null default now(),
+    primary key (date, session)
+);
+
 do $$
 begin
     if not exists (

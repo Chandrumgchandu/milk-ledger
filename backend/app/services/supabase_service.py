@@ -292,6 +292,29 @@ def mark_message_processed(message_id, phone):
     ).execute()
 
 
+def is_session_closed_recorded(target_date, session_name):
+    row = _single(
+        _table("session_closures")
+        .select("session")
+        .eq("date", _date_str(target_date))
+        .eq("session", session_name)
+        .limit(1)
+        .execute()
+    )
+    return bool(row)
+
+
+def mark_session_closed(target_date, session_name):
+    _table("session_closures").upsert(
+        {
+            "date": _date_str(target_date),
+            "session": session_name,
+            "closed_at": _ts_str(datetime.utcnow()),
+        },
+        on_conflict="date,session",
+    ).execute()
+
+
 def farmer_balance(farmer_id):
     total_amount = sum((entry.amount for entry in list_entries(farmer_id=farmer_id)), Decimal("0.00"))
     paid = sum((payment.amount_paid for payment in list_payments(farmer_id=farmer_id)), Decimal("0.00"))
