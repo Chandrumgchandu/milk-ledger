@@ -1,8 +1,8 @@
 import logging
 
 from flask import Flask, abort, render_template, request, session
-from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.exceptions import SecurityError
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import Config
 from .extensions import csrf, login_manager
@@ -49,6 +49,7 @@ def validate_runtime_config(app):
             app.logger.warning("SECRET_KEY is using a default development value. Set a strong SECRET_KEY before production.")
         if not supabase_url or not supabase_key:
             app.logger.warning("SUPABASE_URL or SUPABASE_KEY is not configured.")
+
     app.config["TRUSTED_HOSTS"] = trusted_hosts or None
 
 
@@ -64,33 +65,30 @@ def register_extensions(app):
     login_manager.login_message_category = "warning"
     login_manager.session_protection = "strong"
 
+    from .services.session_service import auto_finalize_day_entries
     from .services.supabase_service import get_admin_by_id
 
     @login_manager.user_loader
     def load_user(user_id):
         return get_admin_by_id(user_id)
 
-    from .services.session_service import auto_finalize_day_entries
-
     @app.before_request
     def finalize_pending_day_entries():
-        # Skip heavy logic for fast endpoints
         if request.path.startswith("/health"):
             return
         if request.path.startswith("/webhooks"):
             return
-    # ✅ Allow WhatsApp webhook (Meta servers)
         if request.blueprint == "whatsapp":
             return
 
-    trusted_hosts = app.config.get("TRUSTED_HOSTS") or []
-    if trusted_hosts:
-        host = (request.host.split(":")[0] if request.host else "").lower()
-        if host not in trusted_hosts:
-            abort(400)
+        trusted_hosts = app.config.get("TRUSTED_HOSTS") or []
+        if trusted_hosts:
+            host = (request.host.split(":")[0] if request.host else "").lower()
+            if host not in trusted_hosts:
+                abort(400)
 
-    session.permanent = False
-    auto_finalize_day_entries()
+        session.permanent = False
+        auto_finalize_day_entries()
 
     @app.after_request
     def add_security_headers(response):
@@ -121,9 +119,9 @@ def register_blueprints(app):
     from .routes.account import account_bp
     from .routes.auth import auth_bp
     from .routes.dashboard import dashboard_bp
+    from .routes.entries import entries_bp
     from .routes.farmers import farmers_bp
     from .routes.health import health_bp
-    from .routes.entries import entries_bp
     from .routes.whatsapp import whatsapp_bp
 
     app.register_blueprint(account_bp, url_prefix="/account")

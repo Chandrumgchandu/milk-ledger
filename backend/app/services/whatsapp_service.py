@@ -58,6 +58,37 @@ def send_whatsapp_list(to_phone, body_text, button_text, sections, header_text=N
     return _post_message(payload)
 
 
+def send_whatsapp_buttons(to_phone, body_text, buttons, header_text=None, footer_text=None):
+    button_rows = []
+    for button in buttons[:3]:
+        button_id = (button.get("id") or "").strip()
+        button_title = (button.get("title") or "").strip()
+        if not button_id or not button_title:
+            continue
+        button_rows.append({"type": "reply", "reply": {"id": button_id[:256], "title": button_title[:20]}})
+
+    if not button_rows:
+        return send_whatsapp_message(to_phone, body_text)
+
+    interactive = {
+        "type": "button",
+        "body": {"text": body_text[:1024]},
+        "action": {"buttons": button_rows},
+    }
+    if header_text:
+        interactive["header"] = {"type": "text", "text": header_text[:60]}
+    if footer_text:
+        interactive["footer"] = {"text": footer_text[:60]}
+
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to_phone,
+        "type": "interactive",
+        "interactive": interactive,
+    }
+    return _post_message(payload)
+
+
 def _post_message(payload):
     token = current_app.config["WHATSAPP_ACCESS_TOKEN"]
     phone_number_id = current_app.config["WHATSAPP_PHONE_NUMBER_ID"]

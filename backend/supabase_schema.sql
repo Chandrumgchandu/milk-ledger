@@ -131,6 +131,12 @@ create table if not exists whatsapp_states (
     updated_at timestamptz not null default now()
 );
 
+create table if not exists processed_messages (
+    message_id varchar(120) primary key,
+    phone varchar(20) not null,
+    processed_at timestamptz not null default now()
+);
+
 do $$
 begin
     if not exists (

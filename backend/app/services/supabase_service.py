@@ -272,6 +272,26 @@ def clear_whatsapp_state(phone):
     _table("whatsapp_states").delete().eq("phone", normalize_phone(phone)).execute()
 
 
+def is_processed_message(message_id):
+    if not message_id:
+        return False
+    row = _single(_table("processed_messages").select("message_id").eq("message_id", message_id).limit(1).execute())
+    return bool(row)
+
+
+def mark_message_processed(message_id, phone):
+    if not message_id:
+        return
+    _table("processed_messages").upsert(
+        {
+            "message_id": message_id,
+            "phone": normalize_phone(phone),
+            "processed_at": _ts_str(datetime.utcnow()),
+        },
+        on_conflict="message_id",
+    ).execute()
+
+
 def farmer_balance(farmer_id):
     total_amount = sum((entry.amount for entry in list_entries(farmer_id=farmer_id)), Decimal("0.00"))
     paid = sum((payment.amount_paid for payment in list_payments(farmer_id=farmer_id)), Decimal("0.00"))
