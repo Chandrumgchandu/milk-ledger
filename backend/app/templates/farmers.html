@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row g-4">
+  <div class="col-lg-4">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white"><h2 class="h5 mb-0">Add Farmer</h2></div>
+      <div class="card-body">
+        <form method="post" id="addFarmerForm" novalidate>
+          {{ form.hidden_tag() }}
+          <div class="alert alert-danger d-none" id="farmerDuplicateAlert" role="alert"></div>
+          <div class="mb-3">
+            {{ form.unique_code.label(class="form-label") }}
+            {{ form.unique_code(class="form-control", id="farmerUniqueCode") }}
+            {% for error in form.unique_code.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="mb-3">
+            {{ form.name.label(class="form-label") }}
+            {{ form.name(class="form-control", id="farmerName") }}
+            {% for error in form.name.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="mb-3">
+            {{ form.phone.label(class="form-label") }}
+            {{ form.phone(class="form-control", id="farmerPhone") }}
+            {% for error in form.phone.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="mb-3">{{ form.village.label(class="form-label") }}{{ form.village(class="form-control") }}</div>
+          <div class="form-check mb-3">{{ form.is_active(class="form-check-input") }} {{ form.is_active.label(class="form-check-label") }}</div>
+          <div class="mb-3">
+            <label for="farmerMasterKey" class="form-label">Master Key</label>
+            <input type="password" name="master_key" id="farmerMasterKey" class="form-control" autocomplete="off" placeholder="Enter reset key to save">
+            <div class="form-text">Required to add a new farmer.</div>
+          </div>
+          {{ form.submit(class="btn btn-success w-100") }}
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-8">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <h2 class="h5 mb-0">Farmers</h2>
+        <form method="get" class="d-flex gap-2 align-items-center">
+          <input type="text" name="q" value="{{ search }}" class="form-control form-control-sm" placeholder="Search by name, phone, or ID">
+          <button type="submit" class="btn btn-sm btn-primary">Search</button>
+        </form>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead><tr><th>ID</th><th>Name</th><th>Phone</th><th>Village</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            {% for farmer in farmers %}
+            <tr>
+              <td>{{ farmer.unique_code }}</td>
+              <td>{{ farmer.name }}</td>
+              <td>{{ farmer.phone }}</td>
+              <td>{{ farmer.village or "-" }}</td>
+              <td>{{ "Active" if farmer.is_active else "Disabled" }}</td>
+              <td class="text-end">
+                <a href="{{ url_for('farmers.edit', farmer_id=farmer.id) }}" class="btn btn-sm btn-outline-primary">Edit</a>
+                <form method="post" action="{{ url_for('farmers.delete', farmer_id=farmer.id) }}" class="d-inline farmer-delete-form" data-farmer-name="{{ farmer.name }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="master_key" value="">
+                  <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                </form>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="text-center text-muted py-4">No farmers found.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  (function () {
+    const form = document.getElementById("addFarmerForm");
+    const alertBox = document.getElementById("farmerDuplicateAlert");
+    if (!form || !alertBox) return;
+
+    const existingFarmers = {{ all_farmers|map(attribute='unique_code')|list|tojson }};
+    const existingNames = {{ all_farmers|map(attribute='name')|list|tojson }};
+    const existingPhones = {{ all_farmers|map(attribute='phone')|list|tojson }};
+    const uniqueCodeInput = document.getElementById("farmerUniqueCode");
+    const nameInput = document.getElementById("farmerName");
+    const phoneInput = document.getElementById("farmerPhone");
+    const masterKeyInput = document.getElementById("farmerMasterKey");
+
+    function normalize(value) {
+      return (value || "").trim().toLowerCase();
+    }
+
+    function showError(message) {
+      alertBox.textContent = message;
+      alertBox.classList.remove("d-none");
+    }
+
+    function clearError() {
+      alertBox.textContent = "";
+      alertBox.classList.add("d-none");
+    }
+
+    function checkDuplicates() {
+      clearError();
+      const codeValue = (uniqueCodeInput.value || "").trim();
+      const nameValue = normalize(nameInput.value);
+      const phoneValue = (phoneInput.value || "").trim();
+
+      if (codeValue && existingFarmers.map(String).includes(codeValue)) {
+        showError("Farmer ID already exists.");
+        return false;
+      }
+      if (nameValue && existingNames.map(normalize).includes(nameValue)) {
+        showError("Farmer name already exists.");
+        return false;
+      }
+      if (phoneValue && existingPhones.includes(phoneValue)) {
+        showError("Phone number already exists.");
+        return false;
+      }
+      return true;
+    }
+
+    function hasMasterKey() {
+      if ((masterKeyInput.value || "").trim()) {
+        return true;
+      }
+      showError("Master key is required to add a farmer.");
+      return false;
+    }
+
+    [uniqueCodeInput, nameInput, phoneInput].forEach(function (input) {
+      input.addEventListener("input", checkDuplicates);
+    });
+
+    masterKeyInput.addEventListener("input", function () {
+      if ((masterKeyInput.value || "").trim()) {
+        clearError();
+      }
+    });
+
+    form.addEventListener("submit", function (event) {
+      if (!checkDuplicates() || !hasMasterKey()) {
+        event.preventDefault();
+      }
+    });
+
+    document.querySelectorAll(".farmer-delete-form").forEach(function (deleteForm) {
+      deleteForm.addEventListener("submit", function (event) {
+        event.preventDefault();
+        const farmerName = deleteForm.dataset.farmerName || "this farmer";
+        if (!confirm("Delete " + farmerName + " and all linked records?")) {
+          return;
+        }
+        const masterKey = window.prompt("Enter master key to delete " + farmerName + ":");
+        if (!masterKey || !masterKey.trim()) {
+          window.alert("Master key is required to delete a farmer.");
+          return;
+        }
+        deleteForm.querySelector('input[name="master_key"]').value = masterKey.trim();
+        deleteForm.submit();
+      });
+    });
+  })();
+</script>
+{% endblock %}

@@ -1,0 +1,561 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card hero-panel border-0 mb-4">
+  <div class="card-body p-4">
+    <div class="dashboard-topbar">
+      <div class="dashboard-copy">
+        <div class="section-title mb-2">Someshwara Dairy Milk</div>
+        <div class="dashboard-heading-row">
+          <h1 class="h2 fw-semibold mb-0">Owner Control Dashboard</h1>
+          <div class="mini-live-clock" aria-label="Current time and date">
+            <div class="mini-live-clock-face">
+              <div class="mini-live-clock-time" id="dashboardClockTime">{{ now.strftime("%I:%M:%S %p") }}</div>
+            </div>
+            <div class="mini-live-clock-date" id="dashboardClockDate">{{ now.strftime("%d %b %Y") }}</div>
+          </div>
+        </div>
+        <div class="badge-soft mt-3">{{ session_name.title() ~ " Session Active" if session_name else "Outside Session Window" }}</div>
+      </div>
+
+      <div class="dashboard-control-stack">
+        <div class="control-strip">
+          <label class="top-control-card refresh-card compact-card" for="autoRefreshToggle">
+            <div>
+              <div class="section-title mb-1">Auto Refresh</div>
+              <div class="subtle small">Every 30 seconds</div>
+            </div>
+            <span class="switch-shell">
+              <input class="switch-input" type="checkbox" id="autoRefreshToggle">
+              <span class="switch-slider"></span>
+            </span>
+          </label>
+        </div>
+
+        <form method="post" id="rateQuickForm" class="top-control-card">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="settings_action" value="update_rate">
+          <input type="hidden" name="month" value="{{ selected_month }}">
+          <input type="hidden" name="year" value="{{ selected_year }}">
+          <input type="hidden" name="farmer" value="{{ selected_farmer }}">
+          <input type="hidden" name="row_limit" value="{{ selected_row_limit }}">
+          <div class="control-head">
+            <div>
+              <div class="section-title mb-1">Current Milk Rate</div>
+              <div class="h4 mb-0">Rs. {{ "%.2f"|format(current_rate.rate) if current_rate else "0.00" }}</div>
+            </div>
+          </div>
+          <div class="simple-inline-form mt-3">
+            <input type="number" step="0.01" min="0" name="rate" class="form-control" placeholder="Enter new rate">
+            <button class="btn btn-primary" type="submit">Change</button>
+          </div>
+        </form>
+
+        <form method="post" id="sessionSettingsForm" class="top-control-card">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="settings_action" value="update_sessions">
+          <input type="hidden" name="month" value="{{ selected_month }}">
+          <input type="hidden" name="year" value="{{ selected_year }}">
+          <input type="hidden" name="farmer" value="{{ selected_farmer }}">
+          <input type="hidden" name="row_limit" value="{{ selected_row_limit }}">
+          <div class="control-head">
+            <div>
+              <div class="section-title mb-1">Session Timings</div>
+              <div class="subtle small">Auto-save on change</div>
+            </div>
+            <div class="session-pill" id="sessionEditStatus">Morning</div>
+          </div>
+
+          <div class="session-switch compact-session-switch mt-2" role="tablist" aria-label="Session selection">
+            <button type="button" class="session-tab is-active" data-session-target="morning">Morning</button>
+            <button type="button" class="session-tab" data-session-target="evening">Evening</button>
+          </div>
+
+          <div class="session-editor mt-2">
+            <div class="session-field-group is-active" data-session-group="morning">
+              <div class="session-grid">
+                <div class="session-input-block">
+                  <label class="form-label compact-label mb-1">Start</label>
+                  <input type="time" name="morning_start" value="{{ session_settings.morning_start }}" class="form-control session-time-input">
+                </div>
+                <div class="session-input-block">
+                  <label class="form-label compact-label mb-1">End</label>
+                  <input type="time" name="morning_end" value="{{ session_settings.morning_end }}" class="form-control session-time-input">
+                </div>
+              </div>
+            </div>
+
+            <div class="session-field-group" data-session-group="evening">
+              <div class="session-grid">
+                <div class="session-input-block">
+                  <label class="form-label compact-label mb-1">Start</label>
+                  <input type="time" name="evening_start" value="{{ session_settings.evening_start }}" class="form-control session-time-input">
+                </div>
+                <div class="session-input-block">
+                  <label class="form-label compact-label mb-1">End</label>
+                  <input type="time" name="evening_end" value="{{ session_settings.evening_end }}" class="form-control session-time-input">
+                </div>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-6 col-xl-3">
+    <a class="metric-card-link" href="{{ url_for('entries.index', date=now.date().isoformat()) }}" target="_blank" rel="noopener">
+      <div class="card metric-card">
+        <div class="card-body">
+          <div class="metric-card-indicator" aria-hidden="true">&#8599;</div>
+          <div class="section-title mb-2">Today Total Liters</div>
+          <div class="h2 mb-0">{{ "%.2f"|format(metrics.today_total_liters) }}</div>
+          <div class="subtle small mt-2">Open today's all entries</div>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-6 col-xl-3">
+    <a class="metric-card-link" href="{{ url_for('entries.index', date=now.date().isoformat(), session='morning') }}" target="_blank" rel="noopener">
+      <div class="card metric-card">
+        <div class="card-body">
+          <div class="metric-card-indicator" aria-hidden="true">&#8599;</div>
+          <div class="section-title mb-2">Morning Collected</div>
+          <div class="h2 mb-0">{{ metrics.morning_collected_count }}</div>
+          <div class="subtle small mt-2">Open today's morning entries</div>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-6 col-xl-3">
+    <a class="metric-card-link" href="{{ url_for('entries.index', date=now.date().isoformat(), session='evening') }}" target="_blank" rel="noopener">
+      <div class="card metric-card">
+        <div class="card-body">
+          <div class="metric-card-indicator" aria-hidden="true">&#8599;</div>
+          <div class="section-title mb-2">Evening Collected</div>
+          <div class="h2 mb-0">{{ metrics.evening_collected_count }}</div>
+          <div class="subtle small mt-2">Open today's evening entries</div>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-6 col-xl-3">
+    <a class="metric-card-link" href="{{ url_for('dashboard.pending', session=session_name or 'morning') }}" target="_blank" rel="noopener">
+      <div class="card metric-card">
+        <div class="card-body">
+          <div class="metric-card-indicator" aria-hidden="true">&#8599;</div>
+          <div class="section-title mb-2">Pending Farmers</div>
+          <div class="h2 mb-0">{{ metrics.pending_farmers }}</div>
+          <div class="subtle small mt-2">Open today's pending list</div>
+        </div>
+      </div>
+    </a>
+  </div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header p-4 d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <div>
+          <div class="section-title mb-1">Payment Accounting</div>
+          <h2 class="h4 mb-0">Monthly Settlement Desk</h2>
+          <div class="subtle small mt-1">Milk total minus store credit, with secure pay or recover action and instant PDF receipt.</div>
+        </div>
+        <div class="text-end">
+          <div class="section-title mb-1">Settlement Month</div>
+          <div class="h5 mb-0">{{ selected_year }}-{{ "%02d"|format(selected_month) }}</div>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-ledger table-hover mb-0">
+          <thead>
+            <tr>
+              <th>Farmer</th>
+              <th>Milk Total</th>
+              <th>Store Credit</th>
+              <th>Net</th>
+              <th>Paid</th>
+              <th>Recovered</th>
+              <th>Final Balance</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in settlement_rows %}
+            <tr>
+              <td><span class="fw-semibold">{{ row.farmer_code }} - {{ row.farmer_name }}</span></td>
+              <td>Rs. {{ "%.2f"|format(row.milk_total) }}</td>
+              <td>Rs. {{ "%.2f"|format(row.shop_credit_total) }}</td>
+              <td>Rs. {{ "%.2f"|format(row.net_amount) }}</td>
+              <td>Rs. {{ "%.2f"|format(row.paid_to_farmer) }}</td>
+              <td>Rs. {{ "%.2f"|format(row.recovered_from_farmer) }}</td>
+              <td class="{% if row.final_balance > 0 %}text-success{% elif row.final_balance < 0 %}text-warning{% endif %}">
+                Rs. {{ "%.2f"|format(row.final_balance|abs) }}
+              </td>
+              <td>{{ row.final_status }}</td>
+              <td class="text-nowrap">
+                {% if row.final_balance != 0 %}
+                <button
+                  type="button"
+                  class="btn btn-sm btn-primary settlement-action-btn"
+                  data-bs-toggle="modal"
+                  data-bs-target="#settlementModal"
+                  data-farmer-id="{{ row.farmer_id }}"
+                  data-farmer-name="{{ row.farmer_name }}"
+                  data-farmer-code="{{ row.farmer_code }}"
+                  data-net-amount="{{ '%.2f'|format(row.net_amount|abs) }}"
+                  data-final-balance="{{ '%.2f'|format(row.final_balance|abs) }}"
+                  data-direction="{{ 'to_farmer' if row.final_balance > 0 else 'from_farmer' }}"
+                  data-action-label="{{ 'Pay Farmer' if row.final_balance > 0 else 'Recover Credit' }}"
+                  data-status="{{ row.final_status }}"
+                >
+                  {{ "Pay" if row.final_balance > 0 else "Recover" }}
+                </button>
+                {% else %}
+                <span class="badge-soft">Settled</span>
+                {% endif %}
+                <a href="{{ url_for('dashboard.settlement_pdf', farmer_id=row.farmer_id, year=selected_year, month=selected_month) }}" class="btn btn-sm btn-outline-light">
+                  PDF
+                </a>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="9" class="text-center py-5 subtle">No settlement data found for this month.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header p-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+          <div>
+            <div class="section-title mb-1">Monthly Filters</div>
+            <h2 class="h4 mb-0">Ledger View</h2>
+          </div>
+          <div class="text-end">
+            <div class="section-title mb-1">Filtered Month Payout</div>
+            <div class="h4 mb-0">Rs. {{ "%.2f"|format(filtered_month_total) }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="card-body p-4">
+        <form method="get" class="row g-3 align-items-end">
+          <div class="col-md-3">
+            <label class="form-label">Month</label>
+            <select name="month" class="form-select">
+              {% for month_num in range(1, 13) %}
+              <option value="{{ month_num }}" {% if month_num == selected_month %}selected{% endif %}>{{ month_num }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Year</label>
+            <input type="number" name="year" value="{{ selected_year }}" class="form-control">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Farmer Name / ID</label>
+            <input type="text" name="farmer" value="{{ selected_farmer }}" class="form-control" placeholder="Search farmer">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Show Rows</label>
+            <select name="row_limit" class="form-select">
+              {% for limit in row_limit_options %}
+              <option value="{{ limit }}" {% if limit == selected_row_limit %}selected{% endif %}>Recent {{ limit }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-12">
+            <button class="btn btn-primary w-100">Apply</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header p-4 d-flex justify-content-between align-items-center">
+        <div>
+          <div class="section-title mb-1">Day Wise Session Data</div>
+          <h2 class="h4 mb-0">{{ selected_year }}-{{ "%02d"|format(selected_month) }} Collection Ledger</h2>
+          <div class="subtle small mt-1">Showing latest {{ selected_row_limit }} rows first for faster editing.</div>
+        </div>
+        <a href="{{ url_for('entries.index', date='', session='', farmer_id='') }}" class="btn btn-outline-light btn-sm">Open Entries</a>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-ledger table-hover mb-0">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Farmer ID</th>
+              <th>Farmer Name</th>
+              <th>Morning Qty</th>
+              <th>Morning Rate</th>
+              <th>Evening Qty</th>
+              <th>Evening Rate</th>
+              <th>Daily Total</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in daily_rows %}
+            <tr>
+              <td>{{ row.date }}</td>
+              <td>{{ row.farmer_code }}</td>
+              <td>{{ row.farmer_name }}</td>
+              <td>{{ "%.2f"|format(row.morning_quantity) if row.morning_quantity is not none else "-" }}</td>
+              <td>{{ "%.2f"|format(row.morning_rate) if row.morning_rate is not none else "-" }}</td>
+              <td>{{ "%.2f"|format(row.evening_quantity) if row.evening_quantity is not none else "-" }}</td>
+              <td>{{ "%.2f"|format(row.evening_rate) if row.evening_rate is not none else "-" }}</td>
+              <td>{{ "%.2f"|format(row.daily_total) }}</td>
+              <td class="text-nowrap">
+                {% if row.morning_entry_id %}
+                <a href="{{ url_for('entries.edit', entry_id=row.morning_entry_id) }}" class="btn btn-sm btn-outline-primary">Edit M</a>
+                {% endif %}
+                {% if row.evening_entry_id %}
+                <a href="{{ url_for('entries.edit', entry_id=row.evening_entry_id) }}" class="btn btn-sm btn-outline-success">Edit E</a>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="9" class="text-center py-5 subtle">No data found for the selected filters.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header p-4">
+        <div class="section-title mb-1">Farmer Wise Monthly Totals</div>
+        <h2 class="h4 mb-0">Selected Month Summary</h2>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead><tr><th>Farmer</th><th>Total Quantity</th><th>Total Amount</th></tr></thead>
+          <tbody>
+            {% for row in monthly_summary %}
+            <tr>
+              <td>{{ row.farmer_name }}</td>
+              <td>{{ "%.2f"|format(row.total_quantity) }}</td>
+              <td>{{ "%.2f"|format(row.total_amount) }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="3" class="text-center py-4 subtle">No summary available.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="settlementModal" tabindex="-1" aria-labelledby="settlementModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content settlement-modal">
+      <form method="post" id="settlementPaymentForm">
+        <div class="modal-header border-0 pb-0">
+          <div>
+            <div class="section-title mb-1">Secure Accounting</div>
+            <h3 class="h5 mb-0" id="settlementModalLabel">Record Settlement</h3>
+          </div>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body pt-3">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="settings_action" value="record_payment">
+          <input type="hidden" name="month" value="{{ selected_month }}">
+          <input type="hidden" name="year" value="{{ selected_year }}">
+          <input type="hidden" name="farmer" value="{{ selected_farmer }}">
+          <input type="hidden" name="row_limit" value="{{ selected_row_limit }}">
+          <input type="hidden" name="farmer_id" id="settlementFarmerId">
+          <input type="hidden" name="direction" id="settlementDirection">
+
+          <div class="settlement-modal-summary mb-3">
+            <div class="fw-semibold" id="settlementFarmerLabel"></div>
+            <div class="subtle small" id="settlementStatusLabel"></div>
+          </div>
+
+          <div class="row g-3">
+            <div class="col-6">
+              <label class="form-label">Net Amount</label>
+              <input type="text" class="form-control" id="settlementNetAmount" readonly>
+            </div>
+            <div class="col-6">
+              <label class="form-label">Final Balance</label>
+              <input type="text" class="form-control" id="settlementFinalBalance" readonly>
+            </div>
+            <div class="col-12">
+              <label class="form-label">Settlement Amount</label>
+              <input type="number" step="0.01" min="0.01" class="form-control" name="amount" id="settlementAmount" required>
+            </div>
+            <div class="col-12">
+              <label class="form-label">Note</label>
+              <input type="text" class="form-control" name="note" id="settlementNote" placeholder="Payment note or reference">
+            </div>
+            <div class="col-12">
+              <label class="form-label">Master Key</label>
+              <input type="password" class="form-control" name="master_key" id="settlementMasterKey" autocomplete="off" placeholder="Enter reset key before confirmation" required>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer border-0 pt-0">
+          <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="settlementSubmitButton">Confirm</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const clockTime = document.getElementById("dashboardClockTime");
+    const clockDate = document.getElementById("dashboardClockDate");
+    const toggle = document.getElementById("autoRefreshToggle");
+    if (clockTime && clockDate) {
+      const timeFormatter = new Intl.DateTimeFormat("en-IN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true,
+      });
+      const dateFormatter = new Intl.DateTimeFormat("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+
+      function updateClock() {
+        const now = new Date();
+        clockTime.textContent = timeFormatter.format(now);
+        clockDate.textContent = dateFormatter.format(now);
+      }
+
+      updateClock();
+      window.setInterval(updateClock, 1000);
+    }
+
+    if (!toggle) return;
+
+    const storageKey = "milk-dashboard-auto-refresh";
+    const savedValue = localStorage.getItem(storageKey);
+    const enabled = savedValue === "true";
+    let timerId = null;
+
+    function stopAutoRefresh() {
+      if (timerId !== null) {
+        window.clearInterval(timerId);
+        timerId = null;
+      }
+    }
+
+    function startAutoRefresh() {
+      stopAutoRefresh();
+      timerId = window.setInterval(function () {
+        window.location.reload();
+      }, 30000);
+    }
+
+    toggle.checked = enabled;
+    if (enabled) {
+      startAutoRefresh();
+    }
+
+    toggle.addEventListener("change", function () {
+      const isEnabled = toggle.checked;
+      localStorage.setItem(storageKey, String(isEnabled));
+      if (isEnabled) {
+        startAutoRefresh();
+      } else {
+        stopAutoRefresh();
+      }
+    });
+  })();
+
+  (function () {
+    const settlementModal = document.getElementById("settlementModal");
+    if (!settlementModal) return;
+
+    const farmerIdInput = document.getElementById("settlementFarmerId");
+    const directionInput = document.getElementById("settlementDirection");
+    const farmerLabel = document.getElementById("settlementFarmerLabel");
+    const statusLabel = document.getElementById("settlementStatusLabel");
+    const netAmountInput = document.getElementById("settlementNetAmount");
+    const finalBalanceInput = document.getElementById("settlementFinalBalance");
+    const amountInput = document.getElementById("settlementAmount");
+    const noteInput = document.getElementById("settlementNote");
+    const masterKeyInput = document.getElementById("settlementMasterKey");
+    const submitButton = document.getElementById("settlementSubmitButton");
+
+    settlementModal.addEventListener("show.bs.modal", function (event) {
+      const trigger = event.relatedTarget;
+      if (!trigger) return;
+
+      farmerIdInput.value = trigger.getAttribute("data-farmer-id") || "";
+      directionInput.value = trigger.getAttribute("data-direction") || "to_farmer";
+      farmerLabel.textContent = (trigger.getAttribute("data-farmer-code") || "") + " - " + (trigger.getAttribute("data-farmer-name") || "");
+      statusLabel.textContent = trigger.getAttribute("data-status") || "";
+      netAmountInput.value = "Rs. " + (trigger.getAttribute("data-net-amount") || "0.00");
+      finalBalanceInput.value = "Rs. " + (trigger.getAttribute("data-final-balance") || "0.00");
+      amountInput.value = trigger.getAttribute("data-final-balance") || "0.00";
+      noteInput.value = "";
+      masterKeyInput.value = "";
+      submitButton.textContent = trigger.getAttribute("data-action-label") || "Confirm";
+    });
+  })();
+
+  (function () {
+    const form = document.getElementById("sessionSettingsForm");
+    const tabs = document.querySelectorAll(".session-tab");
+    const groups = document.querySelectorAll(".session-field-group");
+    const inputs = document.querySelectorAll(".session-time-input");
+    const status = document.getElementById("sessionEditStatus");
+    if (!form || !status) return;
+
+    let activeSession = "morning";
+    let saveTimer = null;
+
+    function setActiveSession(sessionName) {
+      activeSession = sessionName;
+      status.textContent = sessionName.charAt(0).toUpperCase() + sessionName.slice(1);
+      tabs.forEach(function (tab) {
+        tab.classList.toggle("is-active", tab.dataset.sessionTarget === sessionName);
+      });
+      groups.forEach(function (group) {
+        group.classList.toggle("is-active", group.dataset.sessionGroup === sessionName);
+      });
+    }
+
+    function queueSave() {
+      window.clearTimeout(saveTimer);
+      saveTimer = window.setTimeout(function () {
+        form.submit();
+      }, 400);
+    }
+
+    tabs.forEach(function (tab) {
+      tab.addEventListener("click", function () {
+        setActiveSession(tab.dataset.sessionTarget);
+      });
+    });
+
+    inputs.forEach(function (input) {
+      input.addEventListener("change", queueSave);
+    });
+
+    setActiveSession(activeSession);
+  })();
+</script>
+{% endblock %}

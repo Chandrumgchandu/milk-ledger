@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row g-4">
+  <div class="col-xl-4">
+    <div class="card">
+      <div class="card-header p-4">
+        <div class="section-title mb-1">Provision Store</div>
+        <h2 class="h4 mb-0">Add Credit Bill</h2>
+      </div>
+      <div class="card-body p-4">
+        <form method="post" id="storeBillForm">
+          {{ form.hidden_tag() }}
+          <div class="mb-3">
+            {{ form.farmer_id.label(class="form-label") }}
+            {{ form.farmer_id(class="form-select") }}
+          </div>
+          <div class="mb-3">
+            {{ form.bill_date.label(class="form-label") }}
+            {{ form.bill_date(class="form-control", value=today.strftime("%Y-%m-%d")) }}
+          </div>
+          <div class="mb-3">
+            {{ form.note.label(class="form-label") }}
+            {{ form.note(class="form-control", placeholder="Optional note / bill reference") }}
+          </div>
+
+          <div class="section-title mb-2">Bill Items</div>
+          <div id="billItems" class="d-flex flex-column gap-2">
+            {% for idx in range(3) %}
+            <div class="store-item-row">
+              <input type="text" name="item_name[]" class="form-control form-control-sm" placeholder="Item name">
+              <input type="number" name="quantity[]" class="form-control form-control-sm" placeholder="Qty" min="0" step="0.01">
+              <input type="text" name="unit[]" class="form-control form-control-sm" placeholder="Unit">
+              <input type="number" name="unit_price[]" class="form-control form-control-sm" placeholder="Price" min="0" step="0.01">
+            </div>
+            {% endfor %}
+          </div>
+          <div class="d-flex gap-2 mt-3">
+            <button type="button" class="btn btn-outline-light btn-sm" id="addItemRow">Add Item</button>
+            {{ form.submit(class="btn btn-primary btn-sm ms-auto px-4") }}
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-8">
+    <div class="card mb-4">
+      <div class="card-header p-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-end gap-3">
+          <div>
+            <div class="section-title mb-1">Store Ledger</div>
+            <h2 class="h4 mb-0">Monthly Credit Transactions</h2>
+          </div>
+          <form method="get" class="row g-2 align-items-end ledger-filter-inline">
+            <div class="col-sm-3">
+              <label class="form-label mb-1">Month</label>
+              <input type="number" min="1" max="12" name="month" value="{{ selected_month }}" class="form-control form-control-sm">
+            </div>
+            <div class="col-sm-3">
+              <label class="form-label mb-1">Year</label>
+              <input type="number" name="year" value="{{ selected_year }}" class="form-control form-control-sm">
+            </div>
+            <div class="col-sm-4">
+              <label class="form-label mb-1">Farmer</label>
+              <input type="text" name="q" value="{{ search }}" class="form-control form-control-sm" placeholder="ID / name / mobile">
+            </div>
+            <div class="col-sm-2">
+              <button class="btn btn-primary btn-sm w-100">Filter</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Farmer</th>
+              <th>Items</th>
+              <th>Total</th>
+              <th>Source</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for tx in transactions %}
+            <tr>
+              <td>{{ tx.bill_date.strftime("%Y-%m-%d") }}</td>
+              <td>{{ tx.farmer.unique_code if tx.farmer else "-" }} - {{ tx.farmer.name if tx.farmer else "-" }}</td>
+              <td>
+                <div class="small">
+                  {% for item in tx.items[:3] %}
+                  <div>{{ item.item_name }} - {{ "%.2f"|format(item.quantity) }}{{ item.unit or "" }} - Rs. {{ "%.2f"|format(item.subtotal or 0) }}</div>
+                  {% endfor %}
+                  {% if tx.items|length > 3 %}
+                  <div class="subtle">+ {{ tx.items|length - 3 }} more</div>
+                  {% endif %}
+                </div>
+              </td>
+              <td>Rs. {{ "%.2f"|format(tx.total_amount) }}</td>
+              <td>{{ tx.entry_source or "-" }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="text-center py-5 subtle">No store transactions found.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const container = document.getElementById("billItems");
+    const addButton = document.getElementById("addItemRow");
+    if (!container || !addButton) return;
+
+    addButton.addEventListener("click", function () {
+      const row = document.createElement("div");
+      row.className = "store-item-row";
+      row.innerHTML = `
+        <input type="text" name="item_name[]" class="form-control form-control-sm" placeholder="Item name">
+        <input type="number" name="quantity[]" class="form-control form-control-sm" placeholder="Qty" min="0" step="0.01">
+        <input type="text" name="unit[]" class="form-control form-control-sm" placeholder="Unit">
+        <input type="number" name="unit_price[]" class="form-control form-control-sm" placeholder="Price" min="0" step="0.01">
+      `;
+      container.appendChild(row);
+    });
+  })();
+</script>
+{% endblock %}

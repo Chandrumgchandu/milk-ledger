@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row g-4">
+  <div class="col-lg-4">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white"><h2 class="h5 mb-0">Add Entry</h2></div>
+      <div class="card-body">
+        <form method="post">
+          {{ form.hidden_tag() }}
+          <div class="mb-3">{{ form.farmer_id.label(class="form-label") }}{{ form.farmer_id(class="form-select") }}</div>
+          <div class="mb-3">{{ form.date.label(class="form-label") }}{{ form.date(class="form-control") }}</div>
+          <div class="mb-3">{{ form.session.label(class="form-label") }}{{ form.session(class="form-select") }}</div>
+          <div class="mb-3">{{ form.quantity.label(class="form-label") }}{{ form.quantity(class="form-control") }}</div>
+          <div class="mb-3">{{ form.rate.label(class="form-label") }}{{ form.rate(class="form-control") }}</div>
+          {{ form.submit(class="btn btn-success w-100") }}
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-8">
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white">
+        <form method="get" class="row g-2" id="entryFiltersForm">
+          <div class="col-md-4"><input type="date" name="date" value="{{ selected_date }}" class="form-control form-control-sm entry-filter-control"></div>
+          <div class="col-md-4">
+            <select name="session" class="form-select form-select-sm entry-filter-control">
+              <option value="">Choose Session</option>
+              <option value="morning" {% if selected_session == 'morning' %}selected{% endif %}>Morning</option>
+              <option value="evening" {% if selected_session == 'evening' %}selected{% endif %}>Evening</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <select name="farmer_id" class="form-select form-select-sm entry-filter-control">
+              <option value="">Choose Farmer</option>
+              {% for farmer in farmers %}
+              <option value="{{ farmer.id }}" {% if selected_farmer == farmer.id|string %}selected{% endif %}>{{ farmer.unique_code }} - {{ farmer.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </form>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead><tr><th>Date</th><th>Session</th><th>Farmer ID</th><th>Farmer</th><th>Quantity</th><th>Rate</th><th>Amount</th><th></th></tr></thead>
+          <tbody>
+            {% for entry in entries %}
+            <tr>
+              <td>{{ entry.date.strftime("%Y-%m-%d") }}</td>
+              <td>{{ entry.session.title() }}</td>
+              <td>{{ entry.farmer.unique_code if entry.farmer else "-" }}</td>
+              <td>{{ entry.farmer.name if entry.farmer else "-" }}</td>
+              <td>{{ "%.2f"|format(entry.quantity) }}</td>
+              <td>{{ "%.2f"|format(entry.rate) }}</td>
+              <td>{{ "%.2f"|format(entry.amount) }}</td>
+              <td class="text-end"><a href="{{ url_for('entries.edit', entry_id=entry.id) }}" class="btn btn-sm btn-outline-primary">Edit</a></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="8" class="text-center text-muted py-4">No entries found.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  (function () {
+    const form = document.getElementById("entryFiltersForm");
+    if (!form) return;
+
+    form.querySelectorAll(".entry-filter-control").forEach(function (control) {
+      control.addEventListener("change", function () {
+        form.requestSubmit();
+      });
+    });
+  })();
+</script>
+{% endblock %}

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-6">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white"><h2 class="h5 mb-0">Edit Entry</h2></div>
+      <div class="card-body">
+        <form method="post">
+          {{ form.hidden_tag() }}
+          <div class="mb-3">{{ form.farmer_id.label(class="form-label") }}{{ form.farmer_id(class="form-select") }}</div>
+          <div class="mb-3">{{ form.date.label(class="form-label") }}{{ form.date(class="form-control") }}</div>
+          <div class="mb-3">{{ form.session.label(class="form-label") }}{{ form.session(class="form-select") }}</div>
+          <div class="mb-3">{{ form.quantity.label(class="form-label") }}{{ form.quantity(class="form-control") }}</div>
+          <div class="mb-3">{{ form.rate.label(class="form-label") }}{{ form.rate(class="form-control") }}</div>
+          <div class="mb-3">
+            <label for="entryMasterKey" class="form-label">Master Key</label>
+            <input type="password" name="master_key" id="entryMasterKey" class="form-control" autocomplete="off" placeholder="Enter reset key to update">
+            <div class="form-text">Required before editing a milk entry.</div>
+          </div>
+          {{ form.submit(class="btn btn-primary") }}
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

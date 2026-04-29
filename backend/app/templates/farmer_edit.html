@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-6">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white"><h2 class="h5 mb-0">Edit Farmer</h2></div>
+      <div class="card-body">
+        <form method="post" id="editFarmerForm" novalidate>
+          {{ form.hidden_tag() }}
+          <div class="alert alert-danger d-none" id="editFarmerDuplicateAlert" role="alert"></div>
+          <div class="mb-3">
+            {{ form.unique_code.label(class="form-label") }}
+            {{ form.unique_code(class="form-control", id="editFarmerUniqueCode") }}
+            {% for error in form.unique_code.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="mb-3">
+            {{ form.name.label(class="form-label") }}
+            {{ form.name(class="form-control", id="editFarmerName") }}
+            {% for error in form.name.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="mb-3">
+            {{ form.phone.label(class="form-label") }}
+            {{ form.phone(class="form-control", id="editFarmerPhone") }}
+            {% for error in form.phone.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+          </div>
+          <div class="mb-3">{{ form.village.label(class="form-label") }}{{ form.village(class="form-control") }}</div>
+          <div class="form-check mb-3">{{ form.is_active(class="form-check-input") }} {{ form.is_active.label(class="form-check-label") }}</div>
+          <div class="mb-3">
+            <label for="editFarmerMasterKey" class="form-label">Master Key</label>
+            <input type="password" name="master_key" id="editFarmerMasterKey" class="form-control" autocomplete="off" placeholder="Enter reset key to update">
+            <div class="form-text">Required to update farmer details.</div>
+          </div>
+          {{ form.submit(class="btn btn-primary") }}
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  (function () {
+    const form = document.getElementById("editFarmerForm");
+    const alertBox = document.getElementById("editFarmerDuplicateAlert");
+    if (!form || !alertBox) return;
+
+    const currentFarmerId = {{ farmer.id|tojson }};
+    const existingFarmers = {{ all_farmers|map(attribute='unique_code')|list|tojson }};
+    const existingNames = {{ all_farmers|map(attribute='name')|list|tojson }};
+    const existingPhones = {{ all_farmers|map(attribute='phone')|list|tojson }};
+    const allFarmerIds = {{ all_farmers|map(attribute='id')|list|tojson }};
+    const uniqueCodeInput = document.getElementById("editFarmerUniqueCode");
+    const nameInput = document.getElementById("editFarmerName");
+    const phoneInput = document.getElementById("editFarmerPhone");
+    const masterKeyInput = document.getElementById("editFarmerMasterKey");
+
+    function normalize(value) {
+      return (value || "").trim().toLowerCase();
+    }
+
+    function showError(message) {
+      alertBox.textContent = message;
+      alertBox.classList.remove("d-none");
+    }
+
+    function clearError() {
+      alertBox.textContent = "";
+      alertBox.classList.add("d-none");
+    }
+
+    function buildRows() {
+      return allFarmerIds.map(function (id, index) {
+        return {
+          id: id,
+          unique_code: String(existingFarmers[index]),
+          name: normalize(existingNames[index]),
+          phone: existingPhones[index],
+        };
+      });
+    }
+
+    const rows = buildRows().filter(function (row) {
+      return row.id !== currentFarmerId;
+    });
+
+    function checkDuplicates() {
+      clearError();
+      const codeValue = (uniqueCodeInput.value || "").trim();
+      const nameValue = normalize(nameInput.value);
+      const phoneValue = (phoneInput.value || "").trim();
+
+      if (codeValue && rows.some(function (row) { return row.unique_code === codeValue; })) {
+        showError("Farmer ID already exists.");
+        return false;
+      }
+      if (nameValue && rows.some(function (row) { return row.name === nameValue; })) {
+        showError("Farmer name already exists.");
+        return false;
+      }
+      if (phoneValue && rows.some(function (row) { return row.phone === phoneValue; })) {
+        showError("Phone number already exists.");
+        return false;
+      }
+      return true;
+    }
+
+    function hasMasterKey() {
+      if ((masterKeyInput.value || "").trim()) {
+        return true;
+      }
+      showError("Master key is required to update farmer details.");
+      return false;
+    }
+
+    [uniqueCodeInput, nameInput, phoneInput].forEach(function (input) {
+      input.addEventListener("input", checkDuplicates);
+    });
+
+    masterKeyInput.addEventListener("input", function () {
+      if ((masterKeyInput.value || "").trim()) {
+        clearError();
+      }
+    });
+
+    form.addEventListener("submit", function (event) {
+      if (!checkDuplicates() || !hasMasterKey()) {
+        event.preventDefault();
+      }
+    });
+  })();
+</script>
+{% endblock %}

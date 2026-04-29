@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-6">
+    <div class="card border-0 shadow-sm">
+      <div class="card-body p-5 text-center">
+        <div class="section-title mb-2">Error {{ status_code }}</div>
+        <h1 class="h3 mb-3">{{ title }}</h1>
+        <p class="subtle mb-4">{{ message }}</p>
+        <a href="{{ url_for('dashboard.index') if current_user.is_authenticated else url_for('auth.login') }}" class="btn btn-primary">
+          {% if current_user.is_authenticated %}Back to Dashboard{% else %}Back to Login{% endif %}
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

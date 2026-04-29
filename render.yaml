@@ -1,0 +1,47 @@
+services:
+  - type: web
+    name: milk-ledger-backend
+    runtime: python
+    plan: free
+    region: oregon
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: gunicorn --chdir backend app:app
+    autoDeploy: true
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: PREFERRED_URL_SCHEME
+        value: https
+      - key: SESSION_COOKIE_SECURE
+        value: "true"
+      - key: TRUST_PROXY
+        value: "true"
+      - key: SECRET_KEY
+        sync: false
+      - key: PASSWORD_RESET_KEY
+        sync: false
+      - key: APP_BASE_URL
+        sync: false
+      - key: TRUSTED_HOSTS
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: SUPABASE_SCHEMA
+        value: public
+      - key: WHATSAPP_VERIFY_TOKEN
+        sync: false
+      - key: WHATSAPP_ACCESS_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_BUSINESS_ACCOUNT_ID
+        sync: false
+      - key: WHATSAPP_OWNER_PHONE
+        sync: false
+      - key: WHATSAPP_API_BASE
+        value: https://graph.facebook.com/v22.0
+      - key: LOG_LEVEL
+        value: INFO

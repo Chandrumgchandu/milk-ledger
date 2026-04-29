@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <div class="card-header p-4 d-flex flex-wrap justify-content-between align-items-center gap-3">
+    <div>
+      <div class="section-title mb-1">Pending Farmers</div>
+      <h1 class="h3 mb-0">{{ selected_session.title() }} Session Pending List</h1>
+      <div class="subtle small mt-1">{{ now.strftime("%d %b %Y") }}</div>
+    </div>
+    <a href="{{ url_for('dashboard.index') }}" class="btn btn-outline-light btn-sm">Back to Dashboard</a>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th>Farmer ID</th>
+          <th>Farmer Name</th>
+          <th>Phone</th>
+          <th>Village</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for farmer in pending_farmers %}
+        <tr>
+          <td>{{ farmer.unique_code }}</td>
+          <td>{{ farmer.name }}</td>
+          <td>{{ farmer.phone }}</td>
+          <td>{{ farmer.village or "-" }}</td>
+          <td>
+            <a href="{{ url_for('farmers.edit', farmer_id=farmer.id) }}" class="btn btn-sm btn-outline-primary">Open Farmer</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="5" class="text-center py-5 subtle">No pending farmers for this session.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

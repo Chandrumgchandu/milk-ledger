@@ -1,0 +1,15 @@
+.env
+backend/.env
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+*.log
+node_modules/
+.vercel/
+frontend/.vercel/
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/.ruff_cache/

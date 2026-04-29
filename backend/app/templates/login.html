@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-4 col-md-6">
+    <div class="card shadow-sm border-0 mt-5">
+      <div class="card-body p-4">
+        <h2 class="h4 mb-3 text-center">Owner Login</h2>
+        <form method="post">
+          {{ form.hidden_tag() }}
+          <div class="mb-3">{{ form.phone.label(class="form-label") }}{{ form.phone(class="form-control", placeholder="Enter owner phone", autocomplete="username") }}</div>
+          <div class="mb-3">{{ form.password.label(class="form-label") }}{{ form.password(class="form-control", placeholder="Enter password", autocomplete="current-password") }}</div>
+          <div class="d-grid">{{ form.submit(class="btn btn-primary") }}</div>
+        </form>
+        <div class="d-flex justify-content-between align-items-center mt-3 small">
+          <span class="subtle">Secure owner access</span>
+          <a href="{{ url_for('auth.forgot_password') }}" class="text-decoration-none">Forgot Password?</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
