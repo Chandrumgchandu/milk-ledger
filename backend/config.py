@@ -10,6 +10,7 @@ load_dotenv(BASE_DIR / ".env")
 
 
 class Config:
+    TRUSTED_HOSTS = ["milk-ledger.onrender.com", "your-vercel-app.vercel.app"]
     APP_ENV = os.getenv("APP_ENV", os.getenv("FLASK_ENV", "development"))
     SECRET_KEY = os.getenv("SECRET_KEY", "change-me")
     APP_BASE_URL = os.getenv("APP_BASE_URL", "https://example.invalid")
