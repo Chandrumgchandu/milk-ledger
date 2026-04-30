@@ -78,7 +78,7 @@ def process_message(message):
         return
 
     logger.info("Incoming WhatsApp message from %s: %s", phone, body)
-    response = handle_owner_message(phone, body) if phone == normalize_phone(current_app.config["WHATSAPP_OWNER_PHONE"]) else handle_farmer_message(phone, body)
+    response = handle_owner_message(phone, body) if is_owner_phone(phone) else handle_farmer_message(phone, body)
     dispatch_response(phone, response)
 
 
@@ -103,6 +103,19 @@ def dispatch_response(phone, response):
 
 def send_owner_buttons(phone, text, buttons):
     send_whatsapp_buttons(phone, text, buttons[:3])
+
+
+def is_owner_phone(phone):
+    normalized = normalize_phone(phone)
+    allowed = {
+        normalize_phone(value)
+        for value in current_app.config.get("ADMIN_WHATSAPP_NUMBERS", [])
+        if value
+    }
+    owner_phone = normalize_phone(current_app.config.get("WHATSAPP_OWNER_PHONE", ""))
+    if owner_phone:
+        allowed.add(owner_phone)
+    return normalized in allowed
 
 
 def handle_owner_message(phone, body):
@@ -256,7 +269,7 @@ def save_owner_entry(phone, session_name, body, state):
     )
     return {
         "type": "buttons",
-        "text": f"✅ {farmer.name} - {quantity:.2f}L added\nSend: <ID> <Liters>",
+        "text": f"OK: {farmer.name} - {quantity:.2f}L added\nSend: <ID> <Liters>",
         "buttons": [BUTTON_EDIT_LAST, BUTTON_PENDING_LIST, BUTTON_MAIN_MENU],
     }
 
@@ -306,7 +319,7 @@ def edit_last_entry(phone, state, body, active_session):
     )
     return {
         "type": "buttons",
-        "text": f"✅ Updated to {quantity:.2f}L\nSend: <ID> <Liters>",
+        "text": f"OK: Updated to {quantity:.2f}L\nSend: <ID> <Liters>",
         "buttons": [BUTTON_EDIT_LAST, BUTTON_PENDING_LIST, BUTTON_MAIN_MENU],
     }
 
@@ -328,7 +341,7 @@ def save_new_rate(phone, body, active_session, state):
     if rate <= 0:
         return {"type": "text", "text": "Invalid rate.\nSend new rate"}
     create_rate(rate, created_by=phone)
-    confirmation_text = f"✅ New rate saved: Rs. {rate:.2f}"
+    confirmation_text = f"OK: New rate saved: Rs. {rate:.2f}"
     if active_session and state and state.context_value == active_session:
         upsert_whatsapp_state(
             phone,

@@ -107,17 +107,20 @@ def forgot_password():
     form = ForgotPasswordForm()
     if form.validate_on_submit():
         phone = normalize_phone(form.phone.data)
-        admin = get_admin_by_phone(phone)
         is_valid_key, error_message = validate_master_key(form.recovery_key.data)
 
         if not current_app.config["PASSWORD_RESET_KEY"]:
             flash("Password reset is not configured. Add PASSWORD_RESET_KEY in .env.", "danger")
-        elif admin and is_valid_key:
-            update_admin_password_by_phone(phone, form.new_password.data)
-            flash("Password reset successful. Please login with the new password.", "success")
-            return redirect(url_for("auth.login"))
         else:
-            flash("Unable to reset password with the provided details.", "danger")
+            try:
+                admin = get_admin_by_phone(phone)
+                if admin and is_valid_key:
+                    update_admin_password_by_phone(phone, form.new_password.data)
+                    flash("Password reset successful. Please login with the new password.", "success")
+                    return redirect(url_for("auth.login"))
+                flash("Unable to reset password with the provided details.", "danger")
+            except Exception:
+                flash("Password reset is temporarily unavailable. Please try again.", "danger")
 
     return render_template("forgot_password.html", form=form)
 

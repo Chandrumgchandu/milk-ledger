@@ -30,10 +30,11 @@ def get_session_settings():
         "evening_end": "21:00",
     }
     try:
-        from app.services.supabase_service import get_app_settings
+        from app.services.supabase_service import get_app_settings, safe_query
 
-        values = get_app_settings(defaults.keys(), defaults)
+        values = safe_query(lambda: get_app_settings(defaults.keys(), defaults), fallback={}) or {}
     except Exception:
+        logger.exception("Unable to load session settings from database.")
         values = {}
 
     merged = {key: values.get(key, default) for key, default in defaults.items()}
@@ -81,9 +82,9 @@ def auto_close_sessions(current_dt=None):
     current_dt = current_dt or now_ist()
     total_created = 0
     if _past_finalization_cutoff(current_dt, "morning"):
-        total_created += finalize_session(current_dt.date(), "morning")
+        total_created += _safe_finalize_session(current_dt.date(), "morning")
     if _past_finalization_cutoff(current_dt, "evening"):
-        total_created += finalize_session(current_dt.date(), "evening")
+        total_created += _safe_finalize_session(current_dt.date(), "evening")
     return total_created
 
 
@@ -131,11 +132,12 @@ def is_session_closed(target_date, session_name):
 
 def _session_override():
     try:
-        from app.services.supabase_service import get_app_setting
+        from app.services.supabase_service import get_app_setting, safe_query
 
-        value = (get_app_setting("active_session_override", "") or "").strip().lower()
+        value = (safe_query(lambda: get_app_setting("active_session_override", ""), fallback="") or "").strip().lower()
         return value
     except Exception:
+        logger.exception("Unable to load session override from database.")
         return ""
 
 
@@ -157,3 +159,11 @@ def _ensure_date(value):
     if isinstance(value, date):
         return value
     return date.fromisoformat(str(value))
+
+
+def _safe_finalize_session(target_date, session_name):
+    try:
+        return finalize_session(target_date, session_name)
+    except Exception:
+        logger.exception("Failed to finalize %s session for %s", session_name, target_date)
+        return 0

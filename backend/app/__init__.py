@@ -94,7 +94,10 @@ def register_extensions(app):
                 abort(400)
 
         session.permanent = False
-        auto_close_sessions()
+        try:
+            auto_close_sessions()
+        except Exception:
+            app.logger.exception("Automatic session finalization failed during request preprocessing.")
 
     @app.after_request
     def add_security_headers(response):

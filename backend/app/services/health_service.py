@@ -1,9 +1,13 @@
 from datetime import datetime, timezone
+import logging
 
 import requests
 from flask import current_app
 
 from app.services.supabase_service import get_client
+
+
+logger = logging.getLogger(__name__)
 
 
 def live_health_check():
@@ -25,6 +29,7 @@ def live_health_check():
 
 def check_supabase():
     try:
+        logger.info("Health probe: Supabase target=%s", _masked_supabase_url())
         client = get_client()
         response = client.table("admins").select("id", count="exact").limit(1).execute()
         return {
@@ -92,3 +97,13 @@ def _safe_json(response):
         return response.json()
     except Exception:
         return {"text": response.text[:300]}
+
+
+def _masked_supabase_url():
+    raw = (current_app.config.get("SUPABASE_URL") or "").strip()
+    if not raw:
+        return "<unset>"
+    if "://" in raw:
+        scheme, rest = raw.split("://", 1)
+        return f"{scheme}://{rest[:10]}***"
+    return f"{raw[:10]}***"

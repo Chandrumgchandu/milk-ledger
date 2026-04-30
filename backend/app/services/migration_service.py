@@ -35,7 +35,12 @@ _MIGRATION_LOCK = Lock()
 
 
 def migration_directory() -> Path:
-    return Path(current_app.root_path).resolve().parents[1] / "supabase" / "migrations"
+    root = Path(current_app.root_path).resolve()
+    for candidate in (root, *root.parents):
+        migrations_dir = candidate / "supabase" / "migrations"
+        if migrations_dir.exists():
+            return migrations_dir
+    return root / "supabase" / "migrations"
 
 
 def mask_supabase_url(url: str) -> str:
@@ -211,7 +216,11 @@ def check_database_ready(auto_fix: bool = True):
 
 def is_missing_table_error(error: Exception) -> bool:
     text = str(error).lower()
-    return "could not find the table" in text or "relation" in text and "does not exist" in text or "undefinedtable" in text
+    return (
+        "could not find the table" in text
+        or ("relation" in text and "does not exist" in text)
+        or "undefinedtable" in text
+    )
 
 
 def attempt_database_self_heal(error: Exception, table_name: str | None = None) -> bool:
