@@ -56,6 +56,14 @@ def _single(response):
     return rows[0] if rows else None
 
 
+def safe_query(fn, fallback=None, context="query"):
+    try:
+        return fn()
+    except Exception:
+        logger.exception("Safe query failed during %s", context)
+        return fallback
+
+
 class SafeClientProxy:
     def __init__(self, client: Client):
         self._client = client

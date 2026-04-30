@@ -10,3 +10,5 @@ if str(BACKEND_DIR) not in sys.path:
 os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_KEY", "test-key")
 os.environ.setdefault("SUPABASE_SCHEMA", "public")
+os.environ.setdefault("SUPABASE_DB_URL", "postgresql://postgres:password@localhost:5432/postgres")
+os.environ.setdefault("APP_ENV", "development")

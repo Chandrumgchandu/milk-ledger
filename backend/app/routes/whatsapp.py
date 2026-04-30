@@ -51,17 +51,16 @@ def verify_webhook():
 @whatsapp_bp.route("/", methods=["POST"], strict_slashes=False)
 def receive_webhook():
     payload = request.get_json(silent=True) or {}
-    try:
-        for entry in payload.get("entry", []):
-            for change in entry.get("changes", []):
-                value = change.get("value", {})
-                if "messages" not in value:
-                    continue
-                for message in value.get("messages", []):
+    for entry in payload.get("entry", []):
+        for change in entry.get("changes", []):
+            value = change.get("value", {})
+            if "messages" not in value:
+                continue
+            for message in value.get("messages", []):
+                try:
                     process_message(message)
-    except Exception as exc:
-        logger.exception("WhatsApp webhook failed: %s", exc)
-        return jsonify({"status": "error"}), 500
+                except Exception as exc:
+                    logger.exception("WhatsApp webhook message processing failed: %s", exc)
     return jsonify({"status": "ok"})
 
 
