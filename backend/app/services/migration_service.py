@@ -67,7 +67,6 @@ def execute_admin_sql(sql: str):
     if not db_url:
         print("⚠️ SUPABASE_DB_URL not set — skipping migrations and schema validation")
         return
-        raise RuntimeError("SUPABASE_DB_URL is required for migration and schema reload operations.")
     with psycopg.connect(db_url, autocommit=True) as conn:
         with conn.cursor() as cur:
             cur.execute(sql)
