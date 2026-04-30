@@ -6,6 +6,7 @@ from decimal import Decimal
 from functools import lru_cache
 import hashlib
 import json
+import logging
 
 from flask import current_app
 from supabase import Client, create_client
@@ -26,15 +27,24 @@ from app.models import (
 )
 from app.utils.helpers import money, normalize_phone
 
+from .migration_service import attempt_database_self_heal
+
+
+logger = logging.getLogger(__name__)
+
 
 @lru_cache(maxsize=1)
 def _client_for(url, key, schema):
     return create_client(url, key, options=ClientOptions(schema=schema, postgrest_client_timeout=20))
 
 
-def get_client() -> Client:
+def get_raw_client() -> Client:
     cfg = current_app.config
     return _client_for(cfg["SUPABASE_URL"].strip(), cfg["SUPABASE_KEY"].strip(), cfg["SUPABASE_SCHEMA"].strip())
+
+
+def get_client() -> Client:
+    return SafeClientProxy(get_raw_client())
 
 
 def _table(name):
@@ -44,6 +54,47 @@ def _table(name):
 def _single(response):
     rows = response.data or []
     return rows[0] if rows else None
+
+
+class SafeClientProxy:
+    def __init__(self, client: Client):
+        self._client = client
+
+    def table(self, name):
+        return SafeQueryProxy(self._client.table(name), table_name=name)
+
+    def __getattr__(self, item):
+        return getattr(self._client, item)
+
+
+class SafeQueryProxy:
+    def __init__(self, builder, table_name=None):
+        self._builder = builder
+        self._table_name = table_name or "<unknown>"
+
+    def execute(self):
+        logger.info("Supabase table access: %s", self._table_name)
+        try:
+            return self._builder.execute()
+        except Exception as exc:
+            logger.exception("Supabase query failed on table %s", self._table_name)
+            if attempt_database_self_heal(exc, self._table_name):
+                logger.info("Retrying Supabase query after self-heal: %s", self._table_name)
+                return self._builder.execute()
+            raise
+
+    def __getattr__(self, item):
+        attr = getattr(self._builder, item)
+        if not callable(attr):
+            return attr
+
+        def wrapper(*args, **kwargs):
+            result = attr(*args, **kwargs)
+            if hasattr(result, "execute"):
+                return SafeQueryProxy(result, table_name=self._table_name)
+            return result
+
+        return wrapper
 
 
 def _date_str(value):
@@ -295,9 +346,10 @@ def mark_message_processed(message_id, phone):
 def is_session_closed_recorded(target_date, session_name):
     row = _single(
         _table("session_closures")
-        .select("session")
-        .eq("date", _date_str(target_date))
-        .eq("session", session_name)
+        .select("id")
+        .eq("target_date", _date_str(target_date))
+        .eq("session_name", session_name)
+        .eq("is_closed", True)
         .limit(1)
         .execute()
     )
@@ -307,11 +359,12 @@ def is_session_closed_recorded(target_date, session_name):
 def mark_session_closed(target_date, session_name):
     _table("session_closures").upsert(
         {
-            "date": _date_str(target_date),
-            "session": session_name,
-            "closed_at": _ts_str(datetime.utcnow()),
+            "session_name": session_name,
+            "target_date": _date_str(target_date),
+            "is_closed": True,
+            "created_at": _ts_str(datetime.utcnow()),
         },
-        on_conflict="date,session",
+        on_conflict="session_name,target_date",
     ).execute()
 
 
@@ -371,6 +424,13 @@ def get_app_setting(key, default=None):
     if not row:
         return default
     return row.get("value", default)
+
+
+def get_app_settings(keys, defaults=None):
+    defaults = defaults or {}
+    rows = _table("app_settings").select("*").in_("key", list(keys)).execute().data or []
+    values = {row["key"]: row.get("value") for row in rows}
+    return {key: values.get(key, defaults.get(key)) for key in keys}
 
 
 def set_app_setting(key, value):

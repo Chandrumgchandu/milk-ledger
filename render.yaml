@@ -5,7 +5,7 @@ services:
     plan: free
     region: oregon
     buildCommand: pip install -r backend/requirements.txt
-    startCommand: gunicorn --chdir backend app:app
+    startCommand: python backend/manage_db.py && gunicorn --chdir backend app:app
     autoDeploy: true
     healthCheckPath: /health
     envVars:
@@ -28,6 +28,8 @@ services:
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_KEY
+        sync: false
+      - key: SUPABASE_DB_URL
         sync: false
       - key: SUPABASE_SCHEMA
         value: public

@@ -16,6 +16,7 @@ def create_app(config_class=Config):
     validate_runtime_config(app)
     configure_proxy(app)
     register_extensions(app)
+    validate_database(app)
     register_blueprints(app)
     register_error_handlers(app)
 
@@ -34,6 +35,7 @@ def validate_runtime_config(app):
     secret_key = (app.config.get("SECRET_KEY") or "").strip()
     supabase_url = (app.config.get("SUPABASE_URL") or "").strip()
     supabase_key = (app.config.get("SUPABASE_KEY") or "").strip()
+    supabase_db_url = (app.config.get("SUPABASE_DB_URL") or "").strip()
     trusted_hosts = list(app.config.get("TRUSTED_HOSTS") or [])
 
     if environment == "production":
@@ -41,6 +43,8 @@ def validate_runtime_config(app):
             raise RuntimeError("SECRET_KEY must be set to a strong value in production.")
         if not supabase_url or not supabase_key:
             raise RuntimeError("SUPABASE_URL and SUPABASE_KEY must be configured in production.")
+        if not supabase_db_url:
+            raise RuntimeError("SUPABASE_DB_URL must be configured in production for migrations and schema validation.")
     else:
         for local_host in ("127.0.0.1", "localhost", "0.0.0.0"):
             if local_host not in trusted_hosts:
@@ -49,6 +53,8 @@ def validate_runtime_config(app):
             app.logger.warning("SECRET_KEY is using a default development value. Set a strong SECRET_KEY before production.")
         if not supabase_url or not supabase_key:
             app.logger.warning("SUPABASE_URL or SUPABASE_KEY is not configured.")
+        if not supabase_db_url:
+            app.logger.warning("SUPABASE_DB_URL is not configured. Automatic schema repair will be limited.")
 
     app.config["TRUSTED_HOSTS"] = trusted_hosts or None
 
@@ -56,6 +62,13 @@ def validate_runtime_config(app):
 def configure_proxy(app):
     if app.config.get("TRUST_PROXY"):
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
+
+
+def validate_database(app):
+    from .services.migration_service import check_database_ready
+
+    with app.app_context():
+        check_database_ready(auto_fix=True)
 
 
 def register_extensions(app):

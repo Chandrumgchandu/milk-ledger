@@ -31,6 +31,7 @@ class Config:
 
     SUPABASE_URL = os.getenv("SUPABASE_URL", "")
     SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+    SUPABASE_DB_URL = os.getenv("SUPABASE_DB_URL", "")
     SUPABASE_SCHEMA = os.getenv("SUPABASE_SCHEMA", "public")
 
     BUSINESS_NAME = os.getenv("BUSINESS_NAME", "Someshwara Dairy Milk")

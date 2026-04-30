@@ -30,10 +30,9 @@ def get_session_settings():
         "evening_end": "21:00",
     }
     try:
-        from app.services.supabase_service import get_client
+        from app.services.supabase_service import get_app_settings
 
-        rows = get_client().table("app_settings").select("*").in_("key", list(defaults.keys())).execute().data or []
-        values = {row["key"]: row["value"] for row in rows}
+        values = get_app_settings(defaults.keys(), defaults)
     except Exception:
         values = {}
 
@@ -46,15 +45,12 @@ def get_session_settings():
 
 
 def update_session_settings(morning_start, morning_end, evening_start, evening_end):
-    from app.services.supabase_service import get_client
+    from app.services.supabase_service import set_app_setting
 
-    rows = [
-        {"key": "morning_start", "value": morning_start},
-        {"key": "morning_end", "value": morning_end},
-        {"key": "evening_start", "value": evening_start},
-        {"key": "evening_end", "value": evening_end},
-    ]
-    get_client().table("app_settings").upsert(rows, on_conflict="key").execute()
+    set_app_setting("morning_start", morning_start)
+    set_app_setting("morning_end", morning_end)
+    set_app_setting("evening_start", evening_start)
+    set_app_setting("evening_end", evening_end)
 
 
 def current_collection_session(current_dt):
