@@ -131,6 +131,8 @@ Start command:
 python backend/manage_db.py && gunicorn --chdir backend app:app
 ```
 
+This repo uses the start command for migration validation because your Render setup is on the free tier. Render's separate `preDeployCommand` is not available on free web services, so the application performs migration/app-start sequencing inside the start command instead.
+
 Required Render env vars:
 - `APP_ENV=production`
 - `SESSION_COOKIE_SECURE=true`
@@ -144,8 +146,9 @@ Deploy flow:
 1. Render installs dependencies.
 2. Render runs `python backend/manage_db.py`.
 3. Migrations are applied from `supabase/migrations`.
-4. Schema is validated.
-5. Gunicorn starts only if validation succeeds.
+4. If the Supabase CLI is unavailable on Render, the app falls back to direct SQL migration execution using `SUPABASE_DB_URL`.
+5. Schema is validated.
+6. Gunicorn starts only if validation succeeds.
 
 Render auto-deploy reference: [Render deploys](https://render.com/docs/deploys/)
 

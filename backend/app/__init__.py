@@ -1,11 +1,13 @@
 import logging
+from time import perf_counter
 
-from flask import Flask, abort, render_template, request, session
+from flask import Flask, abort, g, render_template, request, session
 from werkzeug.exceptions import SecurityError
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import Config
 from .extensions import csrf, login_manager
+from .services.runtime_logging import ist_now_iso, new_request_id, timed_operation, utc_now_iso
 
 
 def create_app(config_class=Config):
@@ -13,13 +15,25 @@ def create_app(config_class=Config):
     app.config.from_object(config_class)
 
     configure_logging(app)
-    validate_runtime_config(app)
-    configure_proxy(app)
-    register_extensions(app)
-    validate_database(app)
-    register_blueprints(app)
-    register_error_handlers(app)
-
+    app.logger.info(
+        "event=app_create stage=start utc=%s ist=%s env=%s",
+        utc_now_iso(),
+        ist_now_iso(),
+        app.config.get("APP_ENV"),
+    )
+    with timed_operation(app.logger, "startup.validate_runtime_config", env=app.config.get("APP_ENV")):
+        validate_runtime_config(app)
+    with timed_operation(app.logger, "startup.configure_proxy", trust_proxy=app.config.get("TRUST_PROXY")):
+        configure_proxy(app)
+    with timed_operation(app.logger, "startup.register_extensions"):
+        register_extensions(app)
+    with timed_operation(app.logger, "startup.validate_database"):
+        validate_database(app)
+    with timed_operation(app.logger, "startup.register_blueprints"):
+        register_blueprints(app)
+    with timed_operation(app.logger, "startup.register_error_handlers"):
+        register_error_handlers(app)
+    app.logger.info("event=app_create stage=ready utc=%s ist=%s", utc_now_iso(), ist_now_iso())
     return app
 
 
@@ -27,6 +41,7 @@ def configure_logging(app):
     logging.basicConfig(
         level=getattr(logging, app.config["LOG_LEVEL"].upper(), logging.INFO),
         format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%S%z",
     )
 
 
@@ -87,20 +102,34 @@ def register_extensions(app):
 
     @app.before_request
     def finalize_pending_day_entries():
+        g.request_id = new_request_id()
+        g.request_started_at = perf_counter()
         trusted_hosts = app.config.get("TRUSTED_HOSTS") or []
         if trusted_hosts:
             host = (request.host.split(":")[0] if request.host else "").lower()
             if host not in trusted_hosts:
                 abort(400)
 
+        app.logger.info(
+            "event=request_start request_id=%s method=%s path=%s host=%s remote_addr=%s utc=%s ist=%s",
+            g.request_id,
+            request.method,
+            request.path,
+            request.host,
+            request.remote_addr,
+            utc_now_iso(),
+            ist_now_iso(),
+        )
         session.permanent = False
         try:
             auto_close_sessions()
         except Exception:
-            app.logger.exception("Automatic session finalization failed during request preprocessing.")
+            app.logger.exception("event=request_preprocess_auto_close_error request_id=%s path=%s", g.request_id, request.path)
 
     @app.after_request
     def add_security_headers(response):
+        elapsed_ms = int((perf_counter() - getattr(g, "request_started_at", perf_counter())) * 1000)
+        response.headers["X-Request-ID"] = getattr(g, "request_id", "")
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
@@ -121,6 +150,16 @@ def register_extensions(app):
         )
         if app.config.get("SESSION_COOKIE_SECURE"):
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        app.logger.info(
+            "event=request_end request_id=%s method=%s path=%s status=%s elapsed_ms=%s utc=%s ist=%s",
+            getattr(g, "request_id", ""),
+            request.method,
+            request.path,
+            response.status_code,
+            elapsed_ms,
+            utc_now_iso(),
+            ist_now_iso(),
+        )
         return response
 
 

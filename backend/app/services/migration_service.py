@@ -8,6 +8,7 @@ import subprocess
 import psycopg
 from flask import current_app
 
+from .runtime_logging import timed_operation, utc_now_iso, ist_now_iso
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +56,13 @@ def mask_supabase_url(url: str) -> str:
 
 
 def log_database_target():
-    logger.info("Supabase target=%s schema=%s", mask_supabase_url(current_app.config.get("SUPABASE_URL", "")), current_app.config["SUPABASE_SCHEMA"])
+    logger.info(
+        "event=database_target utc=%s ist=%s supabase_target=%s schema=%s",
+        utc_now_iso(),
+        ist_now_iso(),
+        mask_supabase_url(current_app.config.get("SUPABASE_URL", "")),
+        current_app.config["SUPABASE_SCHEMA"],
+    )
 
 
 def get_database_admin_url() -> str:
@@ -72,8 +79,8 @@ def execute_admin_sql(sql: str):
 
 
 def reload_postgrest_schema():
-    logger.info("Reloading PostgREST schema cache")
-    execute_admin_sql("notify pgrst, 'reload schema';")
+    with timed_operation(logger, "database.reload_postgrest_schema"):
+        execute_admin_sql("notify pgrst, 'reload schema';")
 
 
 def run_all_migrations(reason: str = "manual"):
@@ -82,27 +89,27 @@ def run_all_migrations(reason: str = "manual"):
         raise RuntimeError(f"Migration directory not found: {migrations_dir}")
 
     with _MIGRATION_LOCK:
-        logger.warning("Running database migrations (%s) from %s", reason, migrations_dir)
-        if _try_supabase_cli_push(migrations_dir):
+        with timed_operation(logger, "database.run_all_migrations", reason=reason, migrations_dir=migrations_dir):
+            if _try_supabase_cli_push(migrations_dir):
+                reload_postgrest_schema()
+                return
+
+            db_url = get_database_admin_url()
+            if not db_url:
+                raise RuntimeError("SUPABASE_DB_URL is required when Supabase CLI is unavailable.")
+
+            migration_files = sorted(migrations_dir.glob("*.sql"))
+            if not migration_files:
+                logger.warning("No migration files found in %s", migrations_dir)
+                return
+
+            with psycopg.connect(db_url, autocommit=True) as conn:
+                with conn.cursor() as cur:
+                    for migration_file in migration_files:
+                        with timed_operation(logger, "database.apply_migration_file", file_name=migration_file.name, reason=reason):
+                            cur.execute(migration_file.read_text(encoding="utf-8"))
+
             reload_postgrest_schema()
-            return
-
-        db_url = get_database_admin_url()
-        if not db_url:
-            raise RuntimeError("SUPABASE_DB_URL is required when Supabase CLI is unavailable.")
-
-        migration_files = sorted(migrations_dir.glob("*.sql"))
-        if not migration_files:
-            logger.warning("No migration files found in %s", migrations_dir)
-            return
-
-        with psycopg.connect(db_url, autocommit=True) as conn:
-            with conn.cursor() as cur:
-                for migration_file in migration_files:
-                    logger.info("Applying migration file %s", migration_file.name)
-                    cur.execute(migration_file.read_text(encoding="utf-8"))
-
-        reload_postgrest_schema()
 
 
 def _try_supabase_cli_push(migrations_dir: Path) -> bool:
@@ -111,14 +118,15 @@ def _try_supabase_cli_push(migrations_dir: Path) -> bool:
         return False
 
     try:
-        result = subprocess.run(
-            ["supabase", "db", "push", "--db-url", db_url],
-            cwd=str(migrations_dir.parent),
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=300,
-        )
+        with timed_operation(logger, "database.supabase_cli_push", migrations_dir=migrations_dir.parent):
+            result = subprocess.run(
+                ["supabase", "db", "push", "--db-url", db_url],
+                cwd=str(migrations_dir.parent),
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=300,
+            )
     except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
         logger.info("Supabase CLI migration push unavailable: %s", exc)
         return False
@@ -203,15 +211,16 @@ def list_schema_issues() -> list[str]:
 
 
 def check_database_ready(auto_fix: bool = True):
-    log_database_target()
-    issues = list_schema_issues()
-    if issues and auto_fix:
-        logger.warning("Database schema issues detected: %s", ", ".join(issues))
-        run_all_migrations(reason="startup validation")
+    with timed_operation(logger, "database.check_ready", auto_fix=auto_fix):
+        log_database_target()
         issues = list_schema_issues()
-    if issues:
-        raise RuntimeError(f"Database schema is incomplete. Issues: {', '.join(issues)}")
-    logger.info("Database schema validation passed")
+        if issues and auto_fix:
+            logger.warning("Database schema issues detected: %s", ", ".join(issues))
+            run_all_migrations(reason="startup validation")
+            issues = list_schema_issues()
+        if issues:
+            raise RuntimeError(f"Database schema is incomplete. Issues: {', '.join(issues)}")
+        logger.info("Database schema validation passed")
 
 
 def is_missing_table_error(error: Exception) -> bool:

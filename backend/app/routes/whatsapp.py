@@ -51,6 +51,7 @@ def verify_webhook():
 @whatsapp_bp.route("/", methods=["POST"], strict_slashes=False)
 def receive_webhook():
     payload = request.get_json(silent=True) or {}
+    logger.info("event=whatsapp_webhook_received entry_count=%s change_count=%s", len(payload.get("entry", [])), sum(len(entry.get("changes", [])) for entry in payload.get("entry", [])))
     for entry in payload.get("entry", []):
         for change in entry.get("changes", []):
             value = change.get("value", {})
@@ -67,17 +68,20 @@ def receive_webhook():
 def process_message(message):
     message_id = (message.get("id") or "").strip()
     if not message_id:
+        logger.info("event=whatsapp_message_skipped reason=missing_message_id")
         return
     if is_processed_message(message_id):
+        logger.info("event=whatsapp_message_skipped reason=duplicate message_id=%s", message_id)
         return
 
     phone = normalize_phone(message.get("from"))
     body = extract_message_text(message)
     mark_message_processed(message_id, phone)
     if not body:
+        logger.info("event=whatsapp_message_skipped reason=empty_body message_id=%s phone=%s", message_id, phone)
         return
 
-    logger.info("Incoming WhatsApp message from %s: %s", phone, body)
+    logger.info("event=whatsapp_message_received message_id=%s phone=%s body=%s", message_id, phone, body.replace("\n", "\\n"))
     response = handle_owner_message(phone, body) if is_owner_phone(phone) else handle_farmer_message(phone, body)
     dispatch_response(phone, response)
 
@@ -93,11 +97,14 @@ def extract_message_text(message):
 
 def dispatch_response(phone, response):
     if not response:
+        logger.info("event=whatsapp_response_skipped phone=%s reason=no_response", phone)
         return
     if response["type"] == "buttons":
+        logger.info("event=whatsapp_response_send phone=%s type=buttons button_count=%s", phone, len(response["buttons"]))
         send_owner_buttons(phone, response["text"], response["buttons"])
         return
     if response["type"] == "text":
+        logger.info("event=whatsapp_response_send phone=%s type=text", phone)
         send_whatsapp_message(phone, response["text"])
 
 

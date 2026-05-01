@@ -4,15 +4,31 @@ from flask import Flask
 
 from config import Config
 from app.services.migration_service import check_database_ready, run_all_migrations
+from app.services.runtime_logging import ist_now_iso, timed_operation, utc_now_iso
 
 
 def main():
-    logging.basicConfig(level=getattr(logging, Config.LOG_LEVEL.upper(), logging.INFO), format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
+    logging.basicConfig(
+        level=getattr(logging, Config.LOG_LEVEL.upper(), logging.INFO),
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%S%z",
+    )
+    logger = logging.getLogger("startup.manage_db")
     app = Flask(__name__)
     app.config.from_object(Config)
+    logger.info(
+        "event=manage_db_boot utc=%s ist=%s env=%s schema=%s",
+        utc_now_iso(),
+        ist_now_iso(),
+        app.config.get("APP_ENV"),
+        app.config.get("SUPABASE_SCHEMA"),
+    )
     with app.app_context():
-        run_all_migrations(reason="manual manage_db run")
-        check_database_ready(auto_fix=False)
+        with timed_operation(logger, "manage_db.migrate", env=app.config.get("APP_ENV")):
+            run_all_migrations(reason="manual manage_db run")
+        with timed_operation(logger, "manage_db.validate_schema", env=app.config.get("APP_ENV")):
+            check_database_ready(auto_fix=False)
+    logger.info("event=manage_db_ready utc=%s ist=%s", utc_now_iso(), ist_now_iso())
     print("database-ready")
 
 
