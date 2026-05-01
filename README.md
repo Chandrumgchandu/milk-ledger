@@ -103,7 +103,7 @@ python backend\manage_db.py
 Start the backend:
 
 ```powershell
-python backend\app.py
+python app.py
 ```
 
 Run tests:
@@ -139,7 +139,7 @@ pip install -r backend/requirements.txt
 Start command:
 
 ```text
-python backend/manage_db.py && gunicorn --chdir backend app:app
+python backend/manage_db.py && gunicorn wsgi:app
 ```
 
 This repo uses the start command for migration validation because your Render setup is on the free tier. Render's separate `preDeployCommand` is not available on free web services, so the application performs migration/app-start sequencing inside the start command instead.

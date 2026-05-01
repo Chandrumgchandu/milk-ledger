@@ -128,6 +128,8 @@ def is_connectivity_error(error: Exception) -> bool:
         or "connecterror" in text
         or "timed out" in text
         or "network is unreachable" in text
+        or "forbidden by its access permissions" in text
+        or "winerror 10013" in text
     )
 
 

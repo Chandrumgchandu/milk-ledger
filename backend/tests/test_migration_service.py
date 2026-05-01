@@ -56,3 +56,7 @@ def test_list_schema_issues_returns_empty_when_postgrest_is_temporarily_unreacha
 
     with app.app_context():
         assert migration_service.list_schema_issues() == []
+
+
+def test_connectivity_error_detects_windows_socket_block():
+    assert migration_service.is_connectivity_error(Exception("[WinError 10013] An attempt was made to access a socket in a way forbidden by its access permissions"))

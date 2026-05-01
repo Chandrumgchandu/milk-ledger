@@ -1,9 +1,15 @@
 import os
+import sys
+from pathlib import Path
 
-from app import create_app
 
+CURRENT_DIR = Path(__file__).resolve().parent
+ROOT_DIR = CURRENT_DIR.parent
 
-app = create_app()
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from wsgi import app  # noqa: E402
 
 
 if __name__ == "__main__":

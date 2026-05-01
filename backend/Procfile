@@ -1,1 +1,1 @@
-web: python manage_db.py && gunicorn app:app
+web: python manage_db.py && gunicorn --chdir .. wsgi:app

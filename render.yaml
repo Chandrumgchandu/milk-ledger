@@ -5,7 +5,7 @@ services:
     plan: free
     region: oregon
     buildCommand: pip install -r backend/requirements.txt
-    startCommand: python backend/manage_db.py && gunicorn --chdir backend app:app
+    startCommand: python backend/manage_db.py && gunicorn wsgi:app
     autoDeploy: true
     healthCheckPath: /health
     envVars:
