@@ -62,6 +62,18 @@ Required backend values:
 - `SECRET_KEY`
 - `PASSWORD_RESET_KEY`
 
+Required `SUPABASE_DB_URL` format:
+
+```text
+postgresql://postgres:YOUR_PASSWORD@db.YOUR_PROJECT_REF.supabase.co:5432/postgres?sslmode=require
+```
+
+Notes:
+- use `postgresql://`, not `http://` or your Supabase project URL
+- use the direct Postgres connection string, not the REST URL
+- keep `sslmode=require`
+- the app normalizes `postgres://` to `postgresql://`, but Render should still be configured with the full correct format
+
 Required frontend value:
 - `API_URL`
 
@@ -141,6 +153,11 @@ Required Render env vars:
 - `SUPABASE_KEY`
 - `SUPABASE_DB_URL`
 - `TRUSTED_HOSTS`
+
+Render check for `SUPABASE_DB_URL`:
+- host should look like `db.<project-ref>.supabase.co`
+- database should be `postgres`
+- query string should include `sslmode=require`
 
 Deploy flow:
 1. Render installs dependencies.

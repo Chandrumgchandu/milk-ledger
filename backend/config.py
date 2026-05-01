@@ -1,12 +1,51 @@
 import os
 from pathlib import Path
 from datetime import timedelta
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from dotenv import load_dotenv
 
 
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
+
+
+def normalize_supabase_db_url(value: str) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+
+    if raw.startswith("postgres://"):
+        raw = "postgresql://" + raw[len("postgres://") :]
+
+    parsed = urlsplit(raw)
+    if parsed.scheme not in {"postgresql"}:
+        return raw
+
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    query.setdefault("sslmode", "require")
+    normalized_query = urlencode(query)
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, normalized_query, parsed.fragment))
+
+
+def validate_supabase_db_url(value: str) -> tuple[bool, str]:
+    raw = (value or "").strip()
+    if not raw:
+        return False, "SUPABASE_DB_URL is missing."
+
+    parsed = urlsplit(raw)
+    if parsed.scheme != "postgresql":
+        return False, "SUPABASE_DB_URL must start with postgresql://"
+    if not parsed.hostname:
+        return False, "SUPABASE_DB_URL must include a database host."
+    if not parsed.username:
+        return False, "SUPABASE_DB_URL must include the database user."
+    if not parsed.path or parsed.path == "/":
+        return False, "SUPABASE_DB_URL must include the database name."
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    if query.get("sslmode", "").lower() != "require":
+        return False, "SUPABASE_DB_URL must include sslmode=require."
+    return True, ""
 
 
 class Config:
@@ -31,7 +70,7 @@ class Config:
 
     SUPABASE_URL = os.getenv("SUPABASE_URL", "")
     SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
-    SUPABASE_DB_URL = os.getenv("SUPABASE_DB_URL", "")
+    SUPABASE_DB_URL = normalize_supabase_db_url(os.getenv("SUPABASE_DB_URL", ""))
     SUPABASE_SCHEMA = os.getenv("SUPABASE_SCHEMA", "public")
 
     BUSINESS_NAME = os.getenv("BUSINESS_NAME", "Someshwara Dairy Milk")

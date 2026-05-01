@@ -56,17 +56,38 @@ def mask_supabase_url(url: str) -> str:
 
 
 def log_database_target():
+    parsed_target = describe_database_admin_target()
     logger.info(
-        "event=database_target utc=%s ist=%s supabase_target=%s schema=%s",
+        "event=database_target utc=%s ist=%s supabase_target=%s schema=%s db_host=%s db_port=%s db_name=%s sslmode=%s",
         utc_now_iso(),
         ist_now_iso(),
         mask_supabase_url(current_app.config.get("SUPABASE_URL", "")),
         current_app.config["SUPABASE_SCHEMA"],
+        parsed_target.get("host", "<unset>"),
+        parsed_target.get("port", "<unset>"),
+        parsed_target.get("database", "<unset>"),
+        parsed_target.get("sslmode", "<unset>"),
     )
 
 
 def get_database_admin_url() -> str:
     return (current_app.config.get("SUPABASE_DB_URL") or "").strip()
+
+
+def describe_database_admin_target() -> dict[str, str]:
+    from urllib.parse import parse_qsl, urlsplit
+
+    raw = get_database_admin_url()
+    if not raw:
+        return {}
+    parsed = urlsplit(raw)
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    return {
+        "host": parsed.hostname or "",
+        "port": str(parsed.port or 5432),
+        "database": parsed.path.lstrip("/") or "",
+        "sslmode": query.get("sslmode", ""),
+    }
 
 
 def execute_admin_sql(sql: str):

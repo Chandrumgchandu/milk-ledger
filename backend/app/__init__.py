@@ -5,7 +5,7 @@ from flask import Flask, abort, g, render_template, request, session
 from werkzeug.exceptions import SecurityError
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from config import Config
+from config import Config, validate_supabase_db_url
 from .extensions import csrf, login_manager
 from .services.runtime_logging import ist_now_iso, new_request_id, timed_operation, utc_now_iso
 
@@ -52,6 +52,7 @@ def validate_runtime_config(app):
     supabase_key = (app.config.get("SUPABASE_KEY") or "").strip()
     supabase_db_url = (app.config.get("SUPABASE_DB_URL") or "").strip()
     trusted_hosts = list(app.config.get("TRUSTED_HOSTS") or [])
+    db_url_valid, db_url_error = validate_supabase_db_url(supabase_db_url) if supabase_db_url else (False, "SUPABASE_DB_URL is missing.")
 
     if environment == "production":
         if not secret_key or secret_key == "change-me":
@@ -60,6 +61,8 @@ def validate_runtime_config(app):
             raise RuntimeError("SUPABASE_URL and SUPABASE_KEY must be configured in production.")
         if not supabase_db_url:
             raise RuntimeError("SUPABASE_DB_URL must be configured in production for migrations and schema validation.")
+        if not db_url_valid:
+            raise RuntimeError(f"SUPABASE_DB_URL is invalid: {db_url_error}")
     else:
         for local_host in ("127.0.0.1", "localhost", "0.0.0.0"):
             if local_host not in trusted_hosts:
@@ -70,6 +73,8 @@ def validate_runtime_config(app):
             app.logger.warning("SUPABASE_URL or SUPABASE_KEY is not configured.")
         if not supabase_db_url:
             app.logger.warning("SUPABASE_DB_URL is not configured. Automatic schema repair will be limited.")
+        elif not db_url_valid:
+            app.logger.warning("SUPABASE_DB_URL format issue: %s", db_url_error)
 
     app.config["TRUSTED_HOSTS"] = trusted_hosts or None
 
