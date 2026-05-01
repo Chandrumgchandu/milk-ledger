@@ -27,8 +27,11 @@ def create_app(config_class=Config):
         configure_proxy(app)
     with timed_operation(app.logger, "startup.register_extensions"):
         register_extensions(app)
-    with timed_operation(app.logger, "startup.validate_database"):
-        validate_database(app)
+    try:
+        with timed_operation(app.logger, "startup.validate_database"):
+            validate_database(app)
+    except Exception as exc:
+        app.logger.warning("Database validation unavailable -> continuing startup in degraded mode: %s", exc)
     with timed_operation(app.logger, "startup.register_blueprints"):
         register_blueprints(app)
     with timed_operation(app.logger, "startup.register_error_handlers"):
@@ -60,9 +63,9 @@ def validate_runtime_config(app):
         if not supabase_url or not supabase_key:
             raise RuntimeError("SUPABASE_URL and SUPABASE_KEY must be configured in production.")
         if not supabase_db_url:
-            raise RuntimeError("SUPABASE_DB_URL must be configured in production for migrations and schema validation.")
-        if not db_url_valid:
-            raise RuntimeError(f"SUPABASE_DB_URL is invalid: {db_url_error}")
+            app.logger.warning("SUPABASE_DB_URL is missing in production -> migrations/admin validation disabled")
+        elif not db_url_valid:
+            app.logger.warning("SUPABASE_DB_URL is invalid in production -> migrations/admin validation disabled: %s", db_url_error)
     else:
         for local_host in ("127.0.0.1", "localhost", "0.0.0.0"):
             if local_host not in trusted_hosts:

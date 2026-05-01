@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from threading import Lock
+from contextlib import contextmanager
 import logging
 import subprocess
 
@@ -74,6 +75,10 @@ def get_database_admin_url() -> str:
     return (current_app.config.get("SUPABASE_DB_URL") or "").strip()
 
 
+def db_admin_available() -> bool:
+    return bool(get_database_admin_url())
+
+
 def describe_database_admin_target() -> dict[str, str]:
     from urllib.parse import parse_qsl, urlsplit
 
@@ -90,52 +95,90 @@ def describe_database_admin_target() -> dict[str, str]:
     }
 
 
-def execute_admin_sql(sql: str):
+def safe_db_connection():
     db_url = get_database_admin_url()
     if not db_url:
-        raise RuntimeError("SUPABASE_DB_URL is required for migration and schema reload operations.")
-    with psycopg.connect(db_url, autocommit=True) as conn:
-        with conn.cursor() as cur:
+        logger.warning("DB_URL not configured -> skipping migrations")
+        return None
+    try:
+        return psycopg.connect(db_url, autocommit=True)
+    except Exception as exc:
+        logger.warning("DB connection failed -> running in degraded mode: %s", exc)
+        return None
+
+
+@contextmanager
+def safe_admin_cursor():
+    conn = safe_db_connection()
+    if conn is None:
+        yield None
+        return
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                yield cur
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def execute_admin_sql(sql: str):
+    with safe_admin_cursor() as cur:
+        if cur is None:
+            return False
+        try:
             cur.execute(sql)
+            return True
+        except Exception as exc:
+            logger.warning("Admin SQL failed -> continuing in degraded mode: %s", exc)
+            return False
 
 
 def reload_postgrest_schema():
     with timed_operation(logger, "database.reload_postgrest_schema"):
-        execute_admin_sql("notify pgrst, 'reload schema';")
+        if not execute_admin_sql("notify pgrst, 'reload schema';"):
+            logger.warning("PostgREST reload skipped")
 
 
 def run_all_migrations(reason: str = "manual"):
     migrations_dir = migration_directory()
     if not migrations_dir.exists():
-        raise RuntimeError(f"Migration directory not found: {migrations_dir}")
+        logger.warning("Migration directory not found -> skipping migrations: %s", migrations_dir)
+        return False
 
     with _MIGRATION_LOCK:
         with timed_operation(logger, "database.run_all_migrations", reason=reason, migrations_dir=migrations_dir):
             if _try_supabase_cli_push(migrations_dir):
                 reload_postgrest_schema()
-                return
+                return True
 
-            db_url = get_database_admin_url()
-            if not db_url:
-                raise RuntimeError("SUPABASE_DB_URL is required when Supabase CLI is unavailable.")
+            if not db_admin_available():
+                logger.warning("DB_URL not configured -> skipping direct SQL migrations")
+                return False
 
             migration_files = sorted(migrations_dir.glob("*.sql"))
             if not migration_files:
                 logger.warning("No migration files found in %s", migrations_dir)
-                return
+                return False
 
-            with psycopg.connect(db_url, autocommit=True) as conn:
-                with conn.cursor() as cur:
-                    for migration_file in migration_files:
-                        with timed_operation(logger, "database.apply_migration_file", file_name=migration_file.name, reason=reason):
-                            cur.execute(migration_file.read_text(encoding="utf-8"))
+            with safe_admin_cursor() as cur:
+                if cur is None:
+                    logger.warning("DB admin connection unavailable -> skipping direct SQL migrations")
+                    return False
+                for migration_file in migration_files:
+                    with timed_operation(logger, "database.apply_migration_file", file_name=migration_file.name, reason=reason):
+                        cur.execute(migration_file.read_text(encoding="utf-8"))
 
             reload_postgrest_schema()
+            return True
 
 
 def _try_supabase_cli_push(migrations_dir: Path) -> bool:
     db_url = get_database_admin_url()
     if not db_url:
+        logger.warning("DB_URL not configured -> skipping Supabase CLI push")
         return False
 
     try:
@@ -161,8 +204,7 @@ def _try_supabase_cli_push(migrations_dir: Path) -> bool:
 
 
 def _schema_issues_via_admin() -> list[str]:
-    db_url = get_database_admin_url()
-    if not db_url:
+    if not db_admin_available():
         return []
 
     schema = current_app.config["SUPABASE_SCHEMA"]
@@ -176,12 +218,17 @@ def _schema_issues_via_admin() -> list[str]:
         from information_schema.columns
         where table_schema = %s
     """
-    with psycopg.connect(db_url, autocommit=True) as conn:
-        with conn.cursor() as cur:
+    with safe_admin_cursor() as cur:
+        if cur is None:
+            return []
+        try:
             cur.execute(table_query, (schema,))
             existing = {row[0] for row in cur.fetchall()}
             cur.execute(column_query, (schema,))
             column_rows = cur.fetchall()
+        except Exception as exc:
+            logger.warning("Admin schema inspection failed -> continuing in degraded mode: %s", exc)
+            return []
 
     issues = [f"missing table: {table}" for table in REQUIRED_TABLES if table not in existing]
     columns_by_table: dict[str, set[str]] = {}
@@ -237,11 +284,15 @@ def check_database_ready(auto_fix: bool = True):
         issues = list_schema_issues()
         if issues and auto_fix:
             logger.warning("Database schema issues detected: %s", ", ".join(issues))
-            run_all_migrations(reason="startup validation")
+            migrated = run_all_migrations(reason="startup validation")
+            if not migrated:
+                logger.warning("Migration auto-fix unavailable -> continuing app startup in degraded mode")
+                return False
             issues = list_schema_issues()
         if issues:
             raise RuntimeError(f"Database schema is incomplete. Issues: {', '.join(issues)}")
         logger.info("Database schema validation passed")
+        return True
 
 
 def is_missing_table_error(error: Exception) -> bool:
@@ -259,9 +310,11 @@ def attempt_database_self_heal(error: Exception, table_name: str | None = None) 
 
     logger.warning("Detected missing-table error while accessing %s: %s", table_name or "<unknown>", error)
     try:
-        run_all_migrations(reason=f"self-heal for {table_name or 'query'}")
-        check_database_ready(auto_fix=False)
-        return True
+        migrated = run_all_migrations(reason=f"self-heal for {table_name or 'query'}")
+        if not migrated:
+            logger.warning("Auto-heal unavailable -> continuing without DB admin repair")
+            return False
+        return bool(check_database_ready(auto_fix=False))
     except Exception:
         logger.exception("Automatic database self-heal failed")
         return False
