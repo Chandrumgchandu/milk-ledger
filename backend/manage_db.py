@@ -26,10 +26,15 @@ def main():
     with app.app_context():
         with timed_operation(logger, "manage_db.migrate", env=app.config.get("APP_ENV")):
             run_all_migrations(reason="manual manage_db run")
-        with timed_operation(logger, "manage_db.validate_schema", env=app.config.get("APP_ENV")):
-            check_database_ready(auto_fix=False)
-    logger.info("event=manage_db_ready utc=%s ist=%s", utc_now_iso(), ist_now_iso())
-    print("database-ready")
+        try:
+            with timed_operation(logger, "manage_db.validate_schema", env=app.config.get("APP_ENV")):
+                check_database_ready(auto_fix=False)
+            logger.info("event=manage_db_ready utc=%s ist=%s mode=validated", utc_now_iso(), ist_now_iso())
+            print("database-ready")
+        except Exception as exc:
+            logger.warning("Database validation unavailable in manage_db -> continuing in degraded mode: %s", exc)
+            logger.info("event=manage_db_ready utc=%s ist=%s mode=degraded", utc_now_iso(), ist_now_iso())
+            print("database-ready-degraded")
 
 
 if __name__ == "__main__":

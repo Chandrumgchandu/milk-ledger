@@ -5,7 +5,7 @@ from flask import Flask, abort, g, render_template, request, session
 from werkzeug.exceptions import SecurityError
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from config import Config, validate_supabase_db_url
+from config import Config, extract_supabase_project_ref, validate_supabase_db_url
 from .extensions import csrf, login_manager
 from .services.runtime_logging import ist_now_iso, new_request_id, timed_operation, utc_now_iso
 
@@ -56,6 +56,8 @@ def validate_runtime_config(app):
     supabase_db_url = (app.config.get("SUPABASE_DB_URL") or "").strip()
     trusted_hosts = list(app.config.get("TRUSTED_HOSTS") or [])
     db_url_valid, db_url_error = validate_supabase_db_url(supabase_db_url) if supabase_db_url else (False, "SUPABASE_DB_URL is missing.")
+    rest_project_ref = extract_supabase_project_ref(supabase_url)
+    db_project_ref = extract_supabase_project_ref(supabase_db_url)
 
     if environment == "production":
         if not secret_key or secret_key == "change-me":
@@ -66,6 +68,12 @@ def validate_runtime_config(app):
             app.logger.warning("SUPABASE_DB_URL is missing in production -> migrations/admin validation disabled")
         elif not db_url_valid:
             app.logger.warning("SUPABASE_DB_URL is invalid in production -> migrations/admin validation disabled: %s", db_url_error)
+        elif rest_project_ref and db_project_ref and rest_project_ref != db_project_ref:
+            app.logger.warning(
+                "Supabase project mismatch detected in production -> SUPABASE_URL=%s SUPABASE_DB_URL=%s",
+                rest_project_ref,
+                db_project_ref,
+            )
     else:
         for local_host in ("127.0.0.1", "localhost", "0.0.0.0"):
             if local_host not in trusted_hosts:
@@ -78,6 +86,12 @@ def validate_runtime_config(app):
             app.logger.warning("SUPABASE_DB_URL is not configured. Automatic schema repair will be limited.")
         elif not db_url_valid:
             app.logger.warning("SUPABASE_DB_URL format issue: %s", db_url_error)
+        elif rest_project_ref and db_project_ref and rest_project_ref != db_project_ref:
+            app.logger.warning(
+                "Supabase project mismatch detected in development -> SUPABASE_URL=%s SUPABASE_DB_URL=%s",
+                rest_project_ref,
+                db_project_ref,
+            )
 
     app.config["TRUSTED_HOSTS"] = trusted_hosts or None
 

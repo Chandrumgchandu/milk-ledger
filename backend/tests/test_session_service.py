@@ -17,10 +17,10 @@ def test_session_closures_migration_enforces_unique_session_date():
         Path(__file__).resolve().parents[2]
         / "supabase"
         / "migrations"
-        / "202604300002_session_closures_v2.sql"
+        / "202605010001_production_baseline.sql"
     )
     sql = migration_path.read_text(encoding="utf-8").lower()
 
     assert "session_name" in sql
     assert "target_date" in sql
-    assert "unique index if not exists uq_session_closures_session_date" in sql
+    assert "create unique index if not exists uq_session_closures_session_target_date" in sql

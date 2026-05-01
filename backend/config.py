@@ -48,6 +48,19 @@ def validate_supabase_db_url(value: str) -> tuple[bool, str]:
     return True, ""
 
 
+def extract_supabase_project_ref(value: str) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+    parsed = urlsplit(raw)
+    host = (parsed.hostname or "").lower()
+    if parsed.scheme in {"http", "https"} and host.endswith(".supabase.co"):
+        return host.split(".")[0]
+    if parsed.scheme == "postgresql" and host.startswith("db.") and host.endswith(".supabase.co"):
+        return host[len("db.") :].split(".")[0]
+    return ""
+
+
 class Config:
     TRUSTED_HOSTS = ["milk-ledger.onrender.com", "your-vercel-app.vercel.app"]
     APP_ENV = os.getenv("APP_ENV", os.getenv("FLASK_ENV", "development"))

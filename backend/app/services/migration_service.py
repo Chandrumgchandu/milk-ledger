@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from pathlib import Path
-from threading import Lock
 from contextlib import contextmanager
 import logging
+from pathlib import Path
 import subprocess
+from threading import Lock
+from urllib.parse import urlsplit
 
 import psycopg
 from flask import current_app
@@ -59,7 +60,7 @@ def mask_supabase_url(url: str) -> str:
 def log_database_target():
     parsed_target = describe_database_admin_target()
     logger.info(
-        "event=database_target utc=%s ist=%s supabase_target=%s schema=%s db_host=%s db_port=%s db_name=%s sslmode=%s",
+        "event=database_target utc=%s ist=%s supabase_target=%s schema=%s db_host=%s db_port=%s db_name=%s sslmode=%s rest_project_ref=%s db_project_ref=%s",
         utc_now_iso(),
         ist_now_iso(),
         mask_supabase_url(current_app.config.get("SUPABASE_URL", "")),
@@ -68,6 +69,8 @@ def log_database_target():
         parsed_target.get("port", "<unset>"),
         parsed_target.get("database", "<unset>"),
         parsed_target.get("sslmode", "<unset>"),
+        _extract_rest_project_ref() or "<unset>",
+        parsed_target.get("project_ref", "<unset>"),
     )
 
 
@@ -92,7 +95,40 @@ def describe_database_admin_target() -> dict[str, str]:
         "port": str(parsed.port or 5432),
         "database": parsed.path.lstrip("/") or "",
         "sslmode": query.get("sslmode", ""),
+        "project_ref": _extract_db_project_ref(raw),
     }
+
+
+def _extract_rest_project_ref() -> str:
+    raw = (current_app.config.get("SUPABASE_URL") or "").strip()
+    if not raw:
+        return ""
+    parsed = urlsplit(raw)
+    host = (parsed.hostname or "").lower()
+    if host.endswith(".supabase.co"):
+        return host.split(".")[0]
+    return ""
+
+
+def _extract_db_project_ref(db_url: str) -> str:
+    parsed = urlsplit((db_url or "").strip())
+    host = (parsed.hostname or "").lower()
+    if host.startswith("db.") and host.endswith(".supabase.co"):
+        return host[len("db.") :].split(".")[0]
+    return ""
+
+
+def is_connectivity_error(error: Exception) -> bool:
+    text = str(error).lower()
+    return (
+        "getaddrinfo failed" in text
+        or "name or service not known" in text
+        or "temporary failure in name resolution" in text
+        or "connection refused" in text
+        or "connecterror" in text
+        or "timed out" in text
+        or "network is unreachable" in text
+    )
 
 
 def safe_db_connection():
@@ -275,7 +311,13 @@ def list_schema_issues() -> list[str]:
     issues = _schema_issues_via_admin()
     if issues:
         return issues
-    return _schema_issues_via_postgrest()
+    try:
+        return _schema_issues_via_postgrest()
+    except Exception as exc:
+        if is_connectivity_error(exc):
+            logger.warning("PostgREST schema validation unavailable -> continuing in degraded mode: %s", exc)
+            return []
+        raise
 
 
 def check_database_ready(auto_fix: bool = True):
@@ -291,7 +333,7 @@ def check_database_ready(auto_fix: bool = True):
             issues = list_schema_issues()
         if issues:
             raise RuntimeError(f"Database schema is incomplete. Issues: {', '.join(issues)}")
-        logger.info("Database schema validation passed")
+        logger.info("Database schema validation passed or was skipped in degraded mode")
         return True
 
 

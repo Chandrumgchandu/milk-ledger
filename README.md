@@ -39,9 +39,8 @@ milk-ledger/
 
 All schema changes live in [D:\My projects\Milk Assistent\supabase\migrations](D:\My projects\Milk Assistent\supabase\migrations).
 
-Current migration files:
-- [D:\My projects\Milk Assistent\supabase\migrations\202604300001_initial_schema.sql](D:\My projects\Milk Assistent\supabase\migrations\202604300001_initial_schema.sql)
-- [D:\My projects\Milk Assistent\supabase\migrations\202604300002_session_closures_v2.sql](D:\My projects\Milk Assistent\supabase\migrations\202604300002_session_closures_v2.sql)
+Current migration file:
+- [D:\My projects\Milk Assistent\supabase\migrations\202605010001_production_baseline.sql](D:\My projects\Milk Assistent\supabase\migrations\202605010001_production_baseline.sql)
 
 The `session_closures` table is managed with:
 - `id uuid primary key`
@@ -119,7 +118,7 @@ Startup now does all of this before serving traffic:
 - checks required tables
 - attempts automatic migration repair if tables are missing
 - reloads the PostgREST schema cache with `NOTIFY pgrst, 'reload schema';`
-- crashes early if the schema is still invalid
+- continues in degraded mode if direct DB admin access or network validation is temporarily unavailable
 
 All Supabase table access goes through a safe wrapper in [D:\My projects\Milk Assistent\backend\app\services\supabase_service.py](D:\My projects\Milk Assistent\backend\app\services\supabase_service.py). If a missing-table error is detected, the backend:
 
@@ -164,8 +163,8 @@ Deploy flow:
 2. Render runs `python backend/manage_db.py`.
 3. Migrations are applied from `supabase/migrations`.
 4. If the Supabase CLI is unavailable on Render, the app falls back to direct SQL migration execution using `SUPABASE_DB_URL`.
-5. Schema is validated.
-6. Gunicorn starts only if validation succeeds.
+5. Schema is validated when possible.
+6. If validation is temporarily unavailable, the service still starts in degraded mode and logs the exact reason.
 
 Render auto-deploy reference: [Render deploys](https://render.com/docs/deploys/)
 

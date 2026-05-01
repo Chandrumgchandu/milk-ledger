@@ -43,3 +43,16 @@ def test_safe_query_proxy_retries_once_after_self_heal(monkeypatch):
 
     assert result == {"ok": True}
     assert builder.calls == 2
+
+
+def test_list_schema_issues_returns_empty_when_postgrest_is_temporarily_unreachable(monkeypatch):
+    app = Flask(__name__)
+    app.config["SUPABASE_URL"] = "https://example.supabase.co"
+    app.config["SUPABASE_SCHEMA"] = "public"
+    app.config["SUPABASE_DB_URL"] = ""
+
+    monkeypatch.setattr(migration_service, "_schema_issues_via_admin", lambda: [])
+    monkeypatch.setattr(migration_service, "_schema_issues_via_postgrest", lambda: (_ for _ in ()).throw(Exception("[Errno 11001] getaddrinfo failed")))
+
+    with app.app_context():
+        assert migration_service.list_schema_issues() == []
