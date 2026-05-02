@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
@@ -81,10 +81,8 @@ def is_session_active(current_dt=None):
 def auto_close_sessions(current_dt=None):
     current_dt = current_dt or now_ist()
     total_created = 0
-    if _past_finalization_cutoff(current_dt, "morning"):
-        total_created += _safe_finalize_session(current_dt.date(), "morning")
-    if _past_finalization_cutoff(current_dt, "evening"):
-        total_created += _safe_finalize_session(current_dt.date(), "evening")
+    for target_date, session_name in _sessions_due_for_finalization(current_dt):
+        total_created += _safe_finalize_session(target_date, session_name)
     return total_created
 
 
@@ -148,6 +146,31 @@ def _past_finalization_cutoff(current_dt, session_name):
     if session_name == "evening":
         return minutes >= (23 * 60 + 59)
     return False
+
+
+def _sessions_due_for_finalization(current_dt):
+    target_date = _ensure_date(current_dt.date())
+    previous_date = target_date - timedelta(days=1)
+    due_sessions = []
+
+    if _past_finalization_cutoff(current_dt, "morning"):
+        due_sessions.append((target_date, "morning"))
+    if _past_finalization_cutoff(current_dt, "evening"):
+        due_sessions.append((target_date, "evening"))
+
+    if current_dt.date() > previous_date:
+        due_sessions.append((previous_date, "morning"))
+        due_sessions.append((previous_date, "evening"))
+
+    ordered = []
+    seen = set()
+    for due_date, session_name in due_sessions:
+        key = (due_date.isoformat(), session_name)
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered.append((due_date, session_name))
+    return ordered
 
 
 def _to_minutes(value):
