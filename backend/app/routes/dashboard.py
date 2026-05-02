@@ -3,26 +3,20 @@ from collections import defaultdict
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
-from flask import Blueprint, current_app, flash, redirect, render_template, request, send_file, url_for
+from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import login_required
 
-from app.services.pdf_service import build_farmer_statement_pdf
 from app.services.session_service import current_collection_session, get_session_settings, now_ist, update_session_settings
 from app.services.supabase_service import (
-    create_or_update_monthly_settlement,
-    create_payment_log,
     create_rate,
     dashboard_metrics,
-    farmer_ledger,
-    get_farmer,
     get_current_rate,
     list_entries,
     list_farmers,
     monthly_farmer_summary,
     pending_for_session,
-    settlement_summary,
 )
-from app.utils.helpers import money, validate_master_key
+from app.utils.helpers import money
 
 
 dashboard_bp = Blueprint("dashboard", __name__)
@@ -61,31 +55,6 @@ def index():
                     if parsed_rate <= 0:
                         raise ValueError("Rate must be greater than zero.")
                     create_rate(parsed_rate, created_by="dashboard_owner")
-            elif request.form.get("settings_action") == "record_payment":
-                farmer_id = int(request.form.get("farmer_id"))
-                amount = money(Decimal(request.form.get("amount", "0").strip()))
-                direction = request.form.get("direction", "to_farmer").strip()
-                note = (request.form.get("note") or "").strip() or None
-                is_valid_key, error_message = validate_master_key(request.form.get("master_key"))
-                if not is_valid_key:
-                    flash(error_message, "danger")
-                elif direction not in {"to_farmer", "from_farmer"}:
-                    flash("Invalid payment direction.", "danger")
-                elif amount <= 0:
-                    flash("Enter a valid positive payment amount.", "danger")
-                else:
-                    settlement = create_or_update_monthly_settlement(farmer_id, selected_year, selected_month, note=note)
-                    create_payment_log(
-                        {
-                            "farmer_id": farmer_id,
-                            "settlement_id": settlement.id if settlement else None,
-                            "payment_date": now.date().isoformat(),
-                            "amount": str(amount),
-                            "direction": direction,
-                            "note": note,
-                        }
-                    )
-                    flash("Settlement payment recorded successfully.", "success")
         except (InvalidOperation, ValueError):
             if request.form.get("settings_action") == "update_rate":
                 flash("Enter a valid positive milk rate.", "danger")
@@ -142,7 +111,6 @@ def index():
         calendar_days=calendar_days,
         farmers=list_farmers(active_only=True),
         session_settings=get_session_settings(),
-        settlement_rows=settlement_summary(selected_year, selected_month),
     )
 
 
@@ -178,39 +146,6 @@ def pending():
         selected_session=selected_session,
         pending_farmers=pending_farmers,
     )
-
-
-@dashboard_bp.route("/dashboard/settlement-pdf/<int:farmer_id>", methods=["GET"])
-@login_required
-def settlement_pdf(farmer_id):
-    now = now_ist()
-    year = _safe_year(request.args.get("year"), now.year)
-    month = _safe_month(request.args.get("month"), now.month)
-    farmer = get_farmer(farmer_id)
-    if not farmer:
-        flash("Farmer not found.", "danger")
-        return redirect(url_for("dashboard.index", month=month, year=year))
-
-    ledger = farmer_ledger(farmer_id, year, month)
-    pdf_buffer = build_farmer_statement_pdf(
-        current_app.config["BUSINESS_NAME"],
-        farmer,
-        f"{calendar.month_name[month]} {year}",
-        ledger["milk_entries"],
-        ledger["store_transactions"],
-        ledger["payment_logs"],
-        {
-            "quantity": ledger["milk_total_quantity"],
-            "amount": ledger["milk_total_amount"],
-            "store_total": ledger["store_total"],
-            "net_amount": ledger["net_amount"],
-            "paid_to_farmer": ledger["paid_to_farmer"],
-            "recovered_from_farmer": ledger["recovered_from_farmer"],
-            "final_balance": ledger["final_balance"],
-            "final_status": ledger["final_status"],
-        },
-    )
-    return send_file(pdf_buffer, mimetype="application/pdf", as_attachment=True, download_name=f"{farmer.name}_{year}_{month:02d}_settlement.pdf")
 
 
 def _build_daily_rows(entries):

@@ -192,6 +192,7 @@ def register_blueprints(app):
     from .routes.entries import entries_bp
     from .routes.farmers import farmers_bp
     from .routes.health import health_bp
+    from .routes.payments import payments_bp
     from .routes.whatsapp import whatsapp_bp
 
     app.register_blueprint(account_bp, url_prefix="/account")
@@ -200,6 +201,7 @@ def register_blueprints(app):
     app.register_blueprint(health_bp)
     app.register_blueprint(farmers_bp, url_prefix="/farmers")
     app.register_blueprint(entries_bp, url_prefix="/entries")
+    app.register_blueprint(payments_bp, url_prefix="/payments")
     app.register_blueprint(whatsapp_bp, url_prefix="/webhooks/whatsapp")
     csrf.exempt(whatsapp_bp)
 
