@@ -65,7 +65,7 @@ class Config:
     TRUSTED_HOSTS = ["milk-ledger.onrender.com", "your-vercel-app.vercel.app"]
     APP_ENV = os.getenv("APP_ENV", os.getenv("FLASK_ENV", "development"))
     SECRET_KEY = os.getenv("SECRET_KEY", "change-me")
-    APP_BASE_URL = os.getenv("APP_BASE_URL", "https://example.invalid")
+    APP_BASE_URL = os.getenv("APP_BASE_URL", "https://milk-ledger.onrender.com")
     PASSWORD_RESET_KEY = os.getenv("PASSWORD_RESET_KEY", "")
     PREFERRED_URL_SCHEME = os.getenv("PREFERRED_URL_SCHEME", "https")
     SESSION_COOKIE_HTTPONLY = True

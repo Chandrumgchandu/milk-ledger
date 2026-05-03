@@ -276,7 +276,7 @@ def save_owner_entry(phone, session_name, body, state):
     )
     return {
         "type": "buttons",
-        "text": f"OK: {farmer.name} - {quantity:.2f}L added\nSend: <ID> <Liters>",
+        "text": f"Done: {farmer.name} - {quantity:.2f}L added\nSend: <ID> <Liters>",
         "buttons": [BUTTON_EDIT_LAST, BUTTON_PENDING_LIST, BUTTON_MAIN_MENU],
     }
 
