@@ -1,6 +1,7 @@
 module.exports = (req, res) => {
-  const apiUrl = process.env.API_URL || "";
+  const apiUrl = (process.env.API_URL || "https://milk-ledger.onrender.com").replace(/\/+$/, "");
+
   res.setHeader("Content-Type", "application/javascript; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
-  res.status(200).send(`window.MILK_LEDGER_CONFIG = ${JSON.stringify({ API_URL: "https://milk-ledger.onrender.com" })};`);
+  res.status(200).send(`window.MILK_LEDGER_CONFIG = ${JSON.stringify({ API_URL: apiUrl })};`);
 };
