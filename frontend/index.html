@@ -8,11 +8,11 @@
       :root {
         --bg: #06111d;
         --panel: #0f1d31;
-        --panel-2: #14253d;
         --text: #eef5ff;
         --muted: #9bb1ca;
         --accent: #3ddc97;
         --accent-2: #4ea8ff;
+        --warning: #facc15;
       }
       * { box-sizing: border-box; }
       body {
@@ -26,34 +26,42 @@
         min-height: 100vh;
       }
       .wrap {
-        max-width: 1080px;
+        max-width: 1120px;
         margin: 0 auto;
-        padding: 48px 20px 72px;
+        padding: 42px 20px 64px;
       }
       .hero {
         background: linear-gradient(145deg, rgba(17, 32, 56, 0.96), rgba(10, 20, 35, 0.94));
         border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 24px;
+        border-radius: 18px;
         padding: 32px;
         box-shadow: 0 20px 64px rgba(0,0,0,0.28);
       }
       .eyebrow {
         color: var(--muted);
         text-transform: uppercase;
-        letter-spacing: 0.16em;
+        letter-spacing: 0.12em;
         font-size: 13px;
         margin-bottom: 10px;
       }
       h1 {
-        font-size: clamp(2rem, 4vw, 3.4rem);
+        font-size: clamp(2rem, 4vw, 3.25rem);
         margin: 0 0 12px;
       }
-      p {
+      h2 {
+        margin: 0 0 10px;
+        font-size: 1rem;
+      }
+      p, li {
         color: var(--muted);
         line-height: 1.7;
-        margin: 0;
       }
-      .actions, .meta {
+      p { margin: 0; }
+      ul {
+        margin: 10px 0 0;
+        padding-left: 20px;
+      }
+      .actions {
         display: flex;
         flex-wrap: wrap;
         gap: 14px;
@@ -86,12 +94,8 @@
       .card {
         background: rgba(255,255,255,0.04);
         border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 20px;
+        border-radius: 14px;
         padding: 20px;
-      }
-      .card h2 {
-        margin: 0 0 8px;
-        font-size: 1rem;
       }
       .status {
         display: inline-flex;
@@ -110,12 +114,14 @@
       }
       .dot.ok { background: var(--accent); box-shadow: 0 0 18px rgba(61,220,151,0.65); }
       .dot.bad { background: #f87171; box-shadow: 0 0 18px rgba(248,113,113,0.65); }
+      .dot.warn { background: var(--warning); box-shadow: 0 0 18px rgba(250,204,21,0.55); }
       code {
         color: #d8ebff;
         background: rgba(255,255,255,0.06);
         padding: 2px 8px;
         border-radius: 999px;
       }
+      .section { margin-top: 22px; }
     </style>
     <script src="/api/config.js"></script>
     <script defer src="/app.js"></script>
@@ -124,15 +130,15 @@
     <main class="wrap">
       <section class="hero">
         <div class="eyebrow">Milk Ledger System</div>
-        <h1>Production launchpad for the Milk Ledger backend.</h1>
+        <h1>Dairy collection ledger with cloud deployment and operations controls.</h1>
         <p>
-          This frontend is a lightweight Vercel-hosted control page. It reads the live backend URL from environment configuration,
-          checks health, and links directly into the secure dashboard and WhatsApp webhook verification path.
+          A Flask and Supabase application for farmer onboarding, daily milk entries, payments, store-credit deductions,
+          reports, PDF output, and WhatsApp webhook workflows. This page is the public Vercel launchpad for the live backend.
         </p>
 
         <div class="actions">
-          <a class="btn btn-primary" id="openDashboard" href="#" target="_blank" rel="noreferrer">Open Dashboard</a>
-          <a class="btn btn-secondary" id="openHealth" href="#" target="_blank" rel="noreferrer">Open Health Check</a>
+          <a class="btn btn-primary" id="openDashboard" href="#" target="_blank" rel="noreferrer">Open Backend Dashboard</a>
+          <a class="btn btn-secondary" id="openHealth" href="#" target="_blank" rel="noreferrer">Open Live Health</a>
         </div>
 
         <div class="grid">
@@ -143,10 +149,34 @@
           <div class="card">
             <h2>Live Health</h2>
             <div class="status" id="healthBadge"><span class="dot"></span><span id="healthText">Checking backend...</span></div>
+            <p class="section" id="healthDetail">Render free-tier services may take a moment to wake up.</p>
           </div>
           <div class="card">
             <h2>Deploy Model</h2>
             <p>Frontend on <code>Vercel</code>, backend on <code>Render</code>, database on <code>Supabase</code>.</p>
+          </div>
+        </div>
+
+        <div class="grid section">
+          <div class="card">
+            <h2>Business Workflow</h2>
+            <ul>
+              <li>Farmer records and milk collection entries</li>
+              <li>Payments, settlements, and store deductions</li>
+              <li>Reports, PDFs, and WhatsApp workflow hooks</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h2>DevOps Evidence</h2>
+            <ul>
+              <li>Render, Vercel, and Supabase deployment configuration</li>
+              <li>GitHub Actions tests and Docker build validation</li>
+              <li>Health checks, secure headers, migrations, and runbook</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h2>Resume Use</h2>
+            <p>Use this URL as the demo link. If the backend health is unavailable, the page still shows the architecture and deployment model while the backend is restored.</p>
           </div>
         </div>
       </section>
