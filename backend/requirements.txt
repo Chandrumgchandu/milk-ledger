@@ -9,9 +9,6 @@ requests==2.32.3
 chardet==5.2.0
 gunicorn==23.0.0
 supabase==2.15.3
-
-# FIXED LINE 👇
 psycopg[binary]>=3.2.10,<3.10
-
 pytest==8.3.5
 tzdata==2025.2
